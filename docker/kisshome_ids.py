@@ -78,11 +78,11 @@ class KisshomeIDS:
         try:
             # Ping the fl server URL
             cmd = f"ping -c1 {self.fl_url}"
-            logger.debug(f"Pinging fl server with {cmd=}")
+            self.logger.debug(f"Pinging fl server with {cmd=}")
             fl_process = subprocess.run(cmd, capture_output=True, shell=True)
             if fl_process.returncode != 0:
                 # Something went wrong
-                logger.warning(f"No fl server connection: {fl_process}")
+                self.logger.warning(f"No fl server connection: {fl_process}")
                 return False
             else:
                 self.logger.debug("Has fl server connection")

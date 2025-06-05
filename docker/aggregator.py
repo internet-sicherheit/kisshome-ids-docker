@@ -7,8 +7,9 @@ Script to aggregate the data and send it back to the adapter
 
 import logging
 import requests
+import json
 
-from states import set_state, RUNNING
+from states import set_state, RUNNING, EXITED
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -38,12 +39,13 @@ def send_results(results, callback_url, logger=default_logger):
     """
     # TODO Send results to the provided url
     try:
-        #demo_url = "http://172.17.0.1:4711/data" # docker0 bridge on the host
-        resp = requests.post(callback_url, json=results) #requests.post(demo_url, json=results, verify=False)
+        #http://172.17.0.1:4711/data -> docker0 bridge on the host
+        logger.info(f"Sending {results=} to {callback_url=}")
+        resp = requests.post(callback_url, json=results, verify=False)
         resp.raise_for_status()
     except Exception as e:
         logger.error(e)
-    #logger.debug(f"Send {results=} to {demo_url=}")
+        set_state(EXITED)
     logger.debug(f"Send {results=} to {callback_url=}")
 
 
@@ -88,7 +90,7 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=de
             #                         "bytes": 5900
             #                     }
             #                 ],
-            #                 "bytes": 15900
+            #                 "bytes": 15900ml_pipe
             #             }
             #         ]
             #     },
@@ -101,7 +103,18 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=de
             #         }
             #     ]
             # }
-            results = {"time": datetime.now(ZoneInfo("Europe/Berlin")).strftime("%d.%m.%Y %H:%M:%S %Z%z"), "file": pcap_name, "rb_result": rb_pipe.read(), "ml_result": ml_pipe.read()}
-            send_results(results, callback_url)
+            # Merge to a final result as json
+            try:
+                info = {"file": pcap_name, 
+                        "time": datetime.now(ZoneInfo("Europe/Berlin")).strftime("%d.%m.%Y %H:%M:%S %Z%z"), 
+                        "result": {"status": "success"}
+                        }
+                ml = {"ml": ml_pipe.read().strip()}
+                rb = {"rb": rb_pipe.read().strip()}
+                results = {**info, **ml, **rb}
+                send_results(results, callback_url)
+            except Exception as e:
+                logger.error(e)
+                set_state(EXITED)
             # Set new state since analysis is done
             set_state(RUNNING)

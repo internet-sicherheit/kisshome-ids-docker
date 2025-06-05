@@ -22,25 +22,79 @@ After that restart the daemon:
 $ sudo systemctl restart docker
 ```
 
-## Build & Run
+## Build
+
+### Buildx
+
+To build the present docker image for `arm` and `x64`, first create a builder with `buildx`. Use
+
+```bash
+$ sudo docker buildx create --use --name multiarch_builder
+```
+
+To publish the build, run
+
+```bash
+$ sudo docker buildx build --platform linux/amd64,linux/arm64 -t dgrossenbach/ids:stable-backports --push .
+```
+
+### Containerd (Not recommended)
+
+#### Config
+
+Currently all pcaps are expected to be found in the `/data` directory on the target host.
+
+First create the .json file in `/etc/docker/daemon.json` or `/.config/docker/daemon.json` (rootless) to enable multi platform builds by adding following lines:
+
+```json
+{
+  "features": {
+    "containerd-snapshotter": true
+  }
+}
+```
+
+After that restart the daemon:
+
+```bash
+$ sudo systemctl restart docker
+```
+
+#### Build
 
 To build the present docker image for `arm` and `x64`, use
 
 ```bash
-$ sudo docker build --platform linux/amd64,linux/arm64 -t kisshome/ids:stable-backports .
+$ sudo docker build --platform linux/amd64,linux/arm64 -t dgrossenbach/ids:stable-backports .
 ```
 
-To debug the output of docker it is recommended to use the `--progress=plain` flag.
+To debug the output of docker it is recommended to use the `--progress=plain` flag. Also, publishing it might go wrong since it has no `manifest`.
+
+## Run
 
 To run the build image with the exposed port and remove it afterward, use
 
 ```bash
-$ sudo docker run --rm -d -p 5000:5000 kisshome/ids:stable-backports
+$ sudo docker run --rm -d -p 5000:5000 dgrossenbach/ids:stable-backports
+```
+
+## Pull
+
+To pull an image, use
+
+```bash
+$ sudo docker pull dgrossenbach/ids:stable-backports
 ```
 
 ## API
 
-The docker container opens port `5000` for any communication with the API. One can use `curl` to communicate with the API. Example:
+### Web
+
+The docker container opens port `5000` for any communication with the API. Call http://localhost:5000/ to use the RESTful API.
+
+### CLI (Not recommended)
+
+One can also use `curl` to communicate with the API. Example:
 
 ```bash
 $ curl -X GET http://localhost:5000/status
@@ -59,6 +113,14 @@ $ cat /path/to/file.pcap | curl -X POST -H "Content-Type: application/octet-stre
 ```
 
 To read the full API doc, visit http://localhost:5000/
+
+## Demo
+
+To run a demo server, you can use the preinstalled `docker0` bridge to host an own, little API. Run
+
+```bash
+$ python3 demo_api.py
+```
 
 ## Structure
 

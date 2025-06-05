@@ -47,7 +47,7 @@ def init_logger():
     logger.setLevel(logging.DEBUG)
     logger.propagate = False
 
-KNOWN_DEVICES_JSON_FILE = "/app/devices.json"
+KNOWN_DEVICES_JSON_FILE = "/app/meta.json"
 
 # 
 known_macs = None
@@ -58,11 +58,11 @@ def load_known_device_json():
     try:
         with open(KNOWN_DEVICES_JSON_FILE, "r") as f:
             known_devices_data = json.load(f)
-            # Suppose devices.json is a mapping { "mac": "desc", ... }
+            # Suppose meta.json is a mapping { "mac": "desc", ... }
             known_macs = {bytes.fromhex(mac.replace(":", "")) for mac in known_devices_data.keys() }
             
     except FileNotFoundError:
-        print("WARNING: devices.json not found. Direction detection won't work.")
+        print("WARNING: meta.json not found. Direction detection won't work.")
         known_macs = set()
 
     except Exception as e:

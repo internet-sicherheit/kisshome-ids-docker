@@ -61,15 +61,15 @@ def rb_write_results(rb_result_pipe_path, logger=default_logger):
     @param logger: logger for logging, default_logger
     @return: content as a string
     """
-    logger.info(f"Write content of /app/eve.json to {rb_result_pipe_path}")
+    logger.info(f"Write alerts of /app/eve.json to {rb_result_pipe_path}")
     with open(os.path.join("/app", "eve.json"), "r") as result_file:
+        filtered_results = rb_filtered_results(result_file.readlines())
         with open(rb_result_pipe_path, "w") as result_pipe:
-            filtered_results = rb_filtered_results(result_file.readlines())
-            json.dump(filtered_results, result_pipe)
+            result_pipe.write(json.dumps(filtered_results))
     # Flush afterward
     with open(os.path.join("/app", "eve.json"), "w") as result_file:
         result_file.write("")
-    logger.info(f"Content of /app/eve.json written to {rb_result_pipe_path}")
+    logger.info(f"Alerts of /app/eve.json written to {rb_result_pipe_path}")
 
 
 def rb_filtered_results(eve_json, logger=default_logger):
@@ -81,7 +81,7 @@ def rb_filtered_results(eve_json, logger=default_logger):
     @return: all valid alerts as a json string
     """
     logger.info("Start filtering alerts from results")
-    alert_dictionary = {"total_rules": rb_count_rules(), "detections": []}
+    alert_dictionary = {"detections": [], "total_rules": rb_count_rules()}
     for line in eve_json:
         entry = json.loads(line)
         if entry["event_type"] == "alert":

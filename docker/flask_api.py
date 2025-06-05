@@ -41,77 +41,91 @@ api = Api(app, version='1.0', title=f'{ENV_NAME} API',
           description=f'A RESTful API to interact with the {ENV_NAME}')
 ns = api.namespace("", description=f"{ENV_NAME} operations")
 # Models for JSON like requests or responses
-config_model = ns.model("Configuration", 
-    {
-        "meta_json": fields.Raw(required=True, description="The list with device MACs for filtering"),
-        "callback_url": fields.String(required=True, description="The URL to send the results of the IDS"),
-        "allow_training": fields.Boolean(required=True, description="Is training with the Federated Learning Server allowed")
-    },
-)
 status_model = ns.model("Status",
     {
-        f"{ENV_NAME} status": fields.String(required=True, description="The status of the IDS"),
-        "Has FL connection": fields.Boolean(required=True, description="Is the Federated Learning Server accessible")
+        "Status": fields.String(required=True, description="The status of the IDS"),
+        "Has Federated Learning server connection": fields.String(required=True, description="The connection status of the Federated Learning Server")
+    }
+)
+status_result_model = ns.model("Status",
+    {
+        "Result": fields.String(required=True, description="Success/Failed"),
+        "Message": fields.Nested(status_model, required=True, description="The status message")
     }
 )
 # Parser otherwise
+config_parser = reqparse.RequestParser()
+config_parser.add_argument('meta_json', location='files', type=FileStorage, required=True, help='The list with device MACs for filtering')
+config_parser.add_argument('callback_url', location='form', type=str, required=True, help='The URL to send the results of the IDS')
+config_parser.add_argument('allow_training', location='form', type=bool, required=True, help='Is training with the Federated Learning Server allowed')
+
 pcap_parser = reqparse.RequestParser()
-pcap_parser.add_argument('pcap_name', location='args', required=True, help='The name of the pcap file')
+pcap_parser.add_argument('pcap_name', location='args', type=str, required=True, help='The name of the pcap file')
 pcap_parser.add_argument('data', location='files', type=FileStorage, required=True, help='PCAP file')
 
 ids = KisshomeIDS()
+# Set IDS to started
+set_state(STARTED)
+
+
+@ns.route("/status")
+@api.doc(responses={200: f"Status message", 
+                    500: f"Internal Server Error"})
+class Status(Resource):
+    @ns.marshal_with(status_result_model)
+    def get(self):
+        """Returns the status of our environment"""
+        try:
+            # Return json
+            return {"Result": "Success", "Message": {"Status": get_state(), "Has Federated Learning server connection": ids.has_fl_connection()}}, 200
+        except Exception as e:
+            set_state(EXITED)
+            return {"Result": "Failed", "Message": e}, 500
 
 
 @ns.route("/configure")
-@api.doc(responses={200: "Configuration set", 500: "Internal Server Error"}, 
+@api.doc(responses={200: f"Configuration set", 
+                    500: f"Internal Server Error"}, 
          params={"meta_json": {"description": "The list with device MACs for filtering", "type": "json"},
                  "callback_url": {"description": "The URL to send the results of the IDS", "type": "string"},
                  "allow_training": {"description": "Is training with the Federated Learning Server allowed", "type": "boolean"}})
 class Configuration(Resource):
-    @ns.expect(config_model)
+    @ns.expect(config_parser)
     def post(self):
         """Set configuration values, like the meta_json file, the callback URL or if training is allowed"""
         try:
             # Set state to prevent sending files via /pcap until it is done
             set_state(CONFIGURING)
             
-            payload = request.get_json()
+            args = config_parser.parse_args()
+
             # Update config
-            ids.update_configuration(payload.get("callback_url"), payload.get("allow_training"))
+            ids.update_configuration(args['callback_url'], args['allow_training'])
             
             # Write meta_json directly to disk
             if os.path.exists(os.path.join("/app", "meta_json")):
                 # Flush content if it exist
                 with open(os.path.join("/app", "meta_json"), "w") as meta_file:
                     meta_file.write("")
+
             with open(os.path.join("/app", "meta_json"), "w") as meta_file:
-                meta_file.write(json.dumps(payload.get("meta_json")))
+                meta_json = args['meta_json']
+                json.dump(json.load(meta_json), meta_file)
             
             # Set state to running now
             set_state(RUNNING)
 
-            return "Configuration set", 200
+            return {"Result": "Success", "Message": "Configuration set"}, 200
         except Exception as e:
             set_state(EXITED)
-            return e, 500
-
-
-@ns.route("/status")
-@api.doc(responses={200: "Status and connection", 500: "Internal Server Error"},)
-class Status(Resource):
-    @ns.marshal_with(status_model)
-    def get(self):
-        """Returns the status of our environment"""
-        try:
-            # Return json
-            return {f"{ENV_NAME} status": get_state(), "Has FL connection": ids.has_fl_connection()}, 200
-        except Exception as e:
-            set_state(EXITED)
-            return {"Status": e}, 500
-
+            return {"Result": "Failed", "Message": e}, 500
+        
 
 @ns.route("/pcap")
-@api.doc(responses={200: f"Pcap received, start {ENV_NAME}", 400: "Not configured", 500: "Internal Server Error", 503: f"{ENV_NAME} {ANALYZING}"},
+@api.doc(responses={200: f"Pcap received, start {ENV_NAME}", 
+                    400: f"Not configured",  
+                    429: f"{ENV_NAME} busy", 
+                    500: f"Internal Server Error"},
          params={"pcap_name": {"description": "The name of the pcap file", "type": "string"}})
 class Pcap(Resource):
     @ns.expect(pcap_parser)
@@ -119,10 +133,10 @@ class Pcap(Resource):
         """Receives pcap data and writes it to the named pipes"""
         if STARTED in get_state():
             # IDS is not configured yet, return 400
-            return f"{get_state()}, but not configured", 400
+            return {"Result": "Failed", "Message": f"Not configured, state: {get_state()}"}, 400
         if ANALYZING in get_state() or CONFIGURING in get_state():
-            # IDS is analysing or configuring, return 503 service unavailable
-            return get_state(), 503
+            # IDS is analysing or configuring, return 429 too many request
+            return {"Result": "Failed", "Message": f"{ENV_NAME} busy, state: {get_state()}"}, 429
         else:
             try:
                 pcap_name = request.args.get('pcap_name')
@@ -155,15 +169,16 @@ class Pcap(Resource):
                         rb_pipe.write(pcap)
                         ml_pipe.write(pcap)
 
-                return f"Pcap {pcap_name=} received, start {ENV_NAME}", 200
+                return {"Result": "Success", "Message": f"Pcap {pcap_name} received, start {ENV_NAME}"}, 200
             except Exception as e:
                 set_state(EXITED)
-                return e, 500
+                return {"Result": "Failed", "Message": e}, 500
 
 
 log_ns = api.namespace("log", description=f"{ENV_NAME} logs") 
 @log_ns.route("")
-@api.doc(responses={200: "[...]", 500: "Internal Server Error"})
+@api.doc(responses={200: f"Ok", 
+                    500: f"Internal Server Error"})
 class Log(Resource):
     def get(self):
         """Returns the contents of the log files as a json"""
@@ -194,10 +209,10 @@ class Log(Resource):
                     result_json["api"] = api_log.readlines()
             else:
                 result_json["api"] = None
-            return result_json, 200
+            return {"Result": "Success", "Message": result_json}, 200
         except Exception as e:
             set_state(EXITED)
-            return e, 500
+            return {"Result": "Failed", "Message": e}, 500
             
 
 def configure_app(flask_app):

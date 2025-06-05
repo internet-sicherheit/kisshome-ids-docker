@@ -16,19 +16,11 @@ STATE_FILE = "/app/state.json"
 # Lock the file access
 LOCK = Lock()
 # Define the states of our environment
-STARTED = "started"
-RUNNING = "running"
-CONFIGURING = "configuring"
-ANALYZING = "analyzing"
-EXITED = "exited"
-# Create status dict to update the state of our environment
-ENV_STATES = {
-    STARTED: f"{ENV_NAME} {STARTED}",
-    RUNNING: f"{ENV_NAME} {RUNNING}",
-    CONFIGURING: f"{ENV_NAME} {CONFIGURING}",
-    ANALYZING: f"{ENV_NAME} {ANALYZING}",
-    EXITED: f"{ENV_NAME} {EXITED}"
-}
+STARTED = "Started"
+RUNNING = "Running"
+CONFIGURING = "Configuring"
+ANALYZING = "Analyzing"
+EXITED = "Exited"
 
 
 def get_state():
@@ -39,7 +31,7 @@ def get_state():
     """
     with LOCK:
         with open(STATE_FILE, "r") as state_file:
-            return ENV_STATES[json.load(state_file)["state"]]
+            return json.load(state_file)["state"]
 
 
 def set_state(new_state):

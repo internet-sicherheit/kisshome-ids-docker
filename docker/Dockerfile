@@ -2,7 +2,7 @@
 FROM --platform=$BUILDPLATFORM debian:stable-backports
 
 # Install apt dependencies
-RUN apt update && apt install -y -t stable-backports python3 python3-pip suricata && apt clean
+RUN apt update && apt install -y -t stable-backports iputils-ping python3 python3-pip suricata && apt clean
 
 # Install python dependencies
 RUN pip3 install --break-system-packages flask flask-restx dpkt numpy tensorflow
@@ -27,7 +27,7 @@ COPY kisshome_ids.py /app/
 COPY ip_to_country.csv /app/
 COPY ip_to_asn.csv /app/
 # temporary placeholder, we will get the metajson from the user later
-COPY extras/devices.json /app/ 
+#COPY extras/devices.json /app/ 
 
 RUN chmod a+x /app/flask_api.py
 RUN chmod a+x /app/setup.py
