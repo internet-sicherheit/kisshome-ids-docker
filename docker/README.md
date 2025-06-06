@@ -1,6 +1,11 @@
 # Docker image with suricata for various architectures
 
-Make sure docker is running on the target system.
+Make sure docker is running on the target system. Use `docker-ce` and not `docker`. The install can look like this:
+
+```bash
+$ curl -fsSL https://get.docker.com -o get-docker.sh
+$ sudo sh get-docker.sh
+```
 
 ## Config
 
@@ -62,10 +67,16 @@ $ sudo systemctl restart docker
 
 #### Build
 
-To build the present docker image for `arm` and `x64`, use
+Since we build manually, we need to replace the first line in the `Dockerfile` by adding `--platform=$BUILDPLATFORM`:
 
 ```bash
-$ sudo docker build --platform linux/amd64,linux/arm64 -t dgrossenbach/ids:stable-backports .
+FROM --platform=$BUILDPLATFORM debian:stable-backports
+```
+
+Then, to build the present docker image for `arm` and `x64`, use
+
+```bash
+$ sudo docker build --platform linux/amd64,linux/arm64 -t kisshome/ids:stable-backports .
 ```
 
 To debug the output of docker it is recommended to use the `--progress=plain` flag. Also, publishing it might go wrong since it has no `manifest`.
@@ -75,7 +86,7 @@ To debug the output of docker it is recommended to use the `--progress=plain` fl
 To run the build image with the exposed port and remove it afterward, use
 
 ```bash
-$ sudo docker run --rm -d -p 5000:5000 dgrossenbach/ids:stable-backports
+$ sudo docker run --rm -d -p 5000:5000 kisshome/ids:stable-backports
 ```
 
 ## Pull
@@ -83,7 +94,7 @@ $ sudo docker run --rm -d -p 5000:5000 dgrossenbach/ids:stable-backports
 To pull an image, use
 
 ```bash
-$ sudo docker pull dgrossenbach/ids:stable-backports
+$ sudo docker pull kisshome/ids:stable-backports
 ```
 
 ## API

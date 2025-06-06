@@ -1,5 +1,6 @@
-# Use debian for the docker image from dockerhub for the given architecture
-FROM --platform=$BUILDPLATFORM debian:stable-backports
+# Use debian for the docker image from dockerhub for all architecture
+#FROM --platform=$BUILDPLATFORM debian:stable-backports
+FROM debian:stable-backports
 
 # Install apt dependencies
 RUN apt update && apt install -y -t stable-backports iputils-ping python3 python3-pip suricata && apt clean
