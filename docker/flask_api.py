@@ -41,16 +41,16 @@ api = Api(app, version='1.0', title=f'{ENV_NAME} API',
           description=f'A RESTful API to interact with the {ENV_NAME}')
 ns = api.namespace("", description=f"{ENV_NAME} operations")
 # Models for JSON like requests or responses
-status_model = ns.model("Status",
+status_message_model = ns.model("Status message",
     {
         "Status": fields.String(required=True, description="The status of the IDS"),
         "Has Federated Learning server connection": fields.String(required=True, description="The connection status of the Federated Learning Server")
     }
 )
-status_result_model = ns.model("Status",
+status_model = ns.model("Status",
     {
         "Result": fields.String(required=True, description="Success/Failed"),
-        "Message": fields.Nested(status_model, required=True, description="The status message")
+        "Message": fields.Nested(status_message_model, required=True, description="The status message. Possible states: Started/Running/Configuring/Analyzing/Exited")
     }
 )
 # Parser otherwise
@@ -72,7 +72,7 @@ set_state(STARTED)
 @api.doc(responses={200: f"Status message", 
                     500: f"Internal Server Error"})
 class Status(Resource):
-    @ns.marshal_with(status_result_model)
+    @ns.marshal_with(status_model)
     def get(self):
         """Returns the status of our environment"""
         try:

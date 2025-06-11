@@ -44,7 +44,7 @@ def send_results(results, callback_url, logger=default_logger):
         resp = requests.post(callback_url, json=results, verify=False)
         resp.raise_for_status()
     except Exception as e:
-        logger.error(e)
+        logger.exception(e)
         set_state(EXITED)
     logger.debug(f"Send {results=} to {callback_url=}")
 
@@ -114,7 +114,7 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=de
                 results = {**info, **ml, **rb}
                 send_results(results, callback_url)
             except Exception as e:
-                logger.error(e)
+                logger.exception(e)
                 set_state(EXITED)
             # Set new state since analysis is done
             set_state(RUNNING)

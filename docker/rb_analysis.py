@@ -10,6 +10,8 @@ import logging
 import json
 import subprocess
 
+from states import set_state, EXITED
+
 # Each log line includes the date and time, the log level, the current function and the message
 formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
 # The log file is the same as the module name plus the suffix ".log"
@@ -50,7 +52,8 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, logger=default_logger):
                 # Write results
                 rb_write_results(rb_result_pipe_path=rb_result_pipe_path)
     except Exception as e:
-        logger.error(f"Could not analyze the pcap with suricata: {e}")
+        set_state(EXITED)
+        logger.exception(f"Could not analyze the pcap with suricata: {e}")
 
 
 def rb_write_results(rb_result_pipe_path, logger=default_logger):
@@ -62,13 +65,17 @@ def rb_write_results(rb_result_pipe_path, logger=default_logger):
     @return: content as a string
     """
     logger.info(f"Write alerts of /app/eve.json to {rb_result_pipe_path}")
-    with open(os.path.join("/app", "eve.json"), "r") as result_file:
-        filtered_results = rb_filtered_results(result_file.readlines())
-        with open(rb_result_pipe_path, "w") as result_pipe:
-            result_pipe.write(json.dumps(filtered_results))
-    # Flush afterward
-    with open(os.path.join("/app", "eve.json"), "w") as result_file:
-        result_file.write("")
+    try: 
+        with open(os.path.join("/app", "eve.json"), "r") as result_file:
+            filtered_results = rb_filtered_results(result_file.readlines())
+            with open(rb_result_pipe_path, "w") as result_pipe:
+                result_pipe.write(json.dumps(filtered_results))
+        # Flush afterward
+        with open(os.path.join("/app", "eve.json"), "w") as result_file:
+            result_file.write("")
+    except Exception as e:
+        set_state(EXITED)
+        logger.exception(f"Could not write the results: {e}")
     logger.info(f"Alerts of /app/eve.json written to {rb_result_pipe_path}")
 
 
@@ -82,19 +89,23 @@ def rb_filtered_results(eve_json, logger=default_logger):
     """
     logger.info("Start filtering alerts from results")
     alert_dictionary = {"detections": [], "total_rules": rb_count_rules()}
-    for line in eve_json:
-        entry = json.loads(line)
-        if entry["event_type"] == "alert":
-            logger.debug(f"{entry=}")
-            # Sometimes ether is not set
-            if "ether" in entry:
-                valid_alert = {
-                    "mac": entry["ether"], # TODO: Is mac inboud/outbound?
-                    "type": "Alert", 
-                    "description": entry["alert"]["signature"], 
-                    "time": entry["timestamp"]
-                    }
-                alert_dictionary["detections"].append(valid_alert)
+    try:
+        for line in eve_json:
+            entry = json.loads(line)
+            if entry["event_type"] == "alert":
+                logger.debug(f"{entry=}")
+                # Sometimes ether is not set
+                if "ether" in entry:
+                    valid_alert = {
+                        "mac": entry["ether"], # TODO: Is mac inboud/outbound?
+                        "type": "Alert", 
+                        "description": entry["alert"]["signature"], 
+                        "time": entry["timestamp"]
+                        }
+                    alert_dictionary["detections"].append(valid_alert)
+    except Exception as e:
+        set_state(EXITED)
+        logger.exception(f"Could not filter the results: {e}")
     logger.info("Finished filtering alerts from results")
     return alert_dictionary
 
@@ -122,7 +133,8 @@ def rb_prepare_rules(logger=default_logger):
         else:
             logger.info(f"Preparing rules done: {preparing_process}")
     except Exception as e:
-        logger.error(f"Could not prepare rules: {e}")
+        set_state(EXITED)
+        logger.exception(f"Could not prepare rules: {e}")
 
 
 def rb_count_rules(logger=default_logger):
@@ -144,7 +156,8 @@ def rb_count_rules(logger=default_logger):
             logger.info(f"Counting rules done: {counting_process}")
             return int(counting_process.stdout)
     except Exception as e:
-        logger.error(f"Could not count rules: {e}")
+        set_state(EXITED)
+        logger.exception(f"Could not count rules: {e}")
 
 
 #if __name__ == '__main__':

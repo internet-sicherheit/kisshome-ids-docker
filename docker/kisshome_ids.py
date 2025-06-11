@@ -88,7 +88,7 @@ class KisshomeIDS:
                 self.logger.debug("Has fl server connection")
             return True
         except Exception as e:
-            self.logger.error(e)
+            self.logger.exception(e)
             set_state(EXITED)
             return False
         
@@ -148,7 +148,7 @@ class KisshomeIDS:
 
             self.logger.info("Analysis configured")
         except Exception as e:
-            self.logger.error(e)
+            self.logger.exception(e)
             set_state(EXITED)
 
     def configure_aggregation(self):
@@ -164,7 +164,7 @@ class KisshomeIDS:
 
             self.logger.info("Aggregation configured")
         except Exception as e:
-            self.logger.error(e)
+            self.logger.exception(e)
             set_state(EXITED)
 
     def start_analysis(self):
@@ -181,7 +181,7 @@ class KisshomeIDS:
 
             self.logger.info("Analysis started")
         except Exception as e:
-            self.logger.error(e)
+            self.logger.exception(e)
             set_state(EXITED)
 
     def start_aggregation(self):
@@ -198,7 +198,7 @@ class KisshomeIDS:
 
             self.logger.info("Aggregation started")
         except Exception as e:
-            self.logger.error(e)
+            self.logger.exception(e)
             set_state(EXITED)
 
     def stop_analysis(self):
@@ -219,7 +219,7 @@ class KisshomeIDS:
 
             self.logger.info("Analysis stopped")
         except Exception as e:
-            self.logger.error(e)
+            self.logger.exception(e)
             set_state(EXITED)
                 
     def stop_aggregation(self):
@@ -240,5 +240,5 @@ class KisshomeIDS:
 
             self.logger.info("Aggregation stopped")
         except Exception as e:
-            self.logger.error(e)
+            self.logger.exception(e)
             set_state(EXITED)

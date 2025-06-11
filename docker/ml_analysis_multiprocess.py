@@ -15,11 +15,11 @@ import csv
 import struct
 import bisect
 import ipaddress
-from functools import lru_cache
 
+from functools import lru_cache
 from collections import defaultdict, deque
 from multiprocessing import Pool, cpu_count
-
+from states import set_state, EXITED
 
 ########################################
 # 0) Set up logging and load our known device MAC addresses
@@ -62,11 +62,13 @@ def load_known_device_json():
             known_macs = {bytes.fromhex(mac.replace(":", "")) for mac in known_devices_data.keys() }
             
     except FileNotFoundError:
-        print("WARNING: meta.json not found. Direction detection won't work.")
+        set_state(EXITED)
+        logger.info("WARNING: meta.json not found. Direction detection won't work.")
         known_macs = set()
 
     except Exception as e:
-        print(f"An unexpected error occurred: {str(e)}")
+        set_state(EXITED)
+        logger.info(f"An unexpected error occurred: {str(e)}")
         sys.exit()
 
 COUNTRY_RECOGNITION_CSV_FILE = "/app/ip_to_country.csv"
@@ -162,6 +164,7 @@ def get_country(ip_int):
             return default_country_value 
     
     except Exception as e:
+        set_state(EXITED)
         logger.exception(f"{idx=} {ip_int=}")
         raise
 
@@ -193,6 +196,7 @@ def get_asn(ip_int):
             return default_asn_value
     
     except Exception as e:
+        set_state(EXITED)
         logger.exception(f"{idx=} {ip_int=}")
         raise
 
@@ -490,6 +494,7 @@ def process_packets(pool, pcap):
         return user_device_statistics, all_results, packet_count, pcap_size
 
     except Exception as e:
+        set_state(EXITED)
         traceback.print_exc()
         logger.exception(f"An unexpected error occurred: {str(e)}")
         raise
@@ -574,13 +579,16 @@ def start_analysis(pool, pcap_pipe, result_pipe):
 
             except dpkt.NeedData:
                 # Means dpkt tried to parse data but it didn't exist or was incomplete
+                set_state(EXITED)
                 logger.exception(f"NeedData error:  => Got empty or truncated pcap.")
 
             except dpkt.UnpackError as e:
                 # If the pcap header is corrupt or there's some other parse error
+                set_state(EXITED)
                 logger.exception("Pcap parse error - invalid or corrupted pcap")
 
             except Exception as e:
+                set_state(EXITED)
                 logger.exception(f"Unknown error parsing pcap: {e}")
             
 # if __name__ == "__main__":
@@ -608,6 +616,7 @@ def ml_analyze(pcap_pipe, result_pipe, allow_training):
 
     # Make sure that processes are stopped even through Ctrl + C or otherwise
     except Exception as e:
+        set_state(EXITED)
         logger.exception("Unknown error")
 
         pool.close()
