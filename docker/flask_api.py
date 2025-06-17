@@ -103,12 +103,12 @@ class Configuration(Resource):
             ids.update_configuration(args['callback_url'], args['allow_training'])
             
             # Write meta_json directly to disk
-            if os.path.exists(os.path.join("/app", "meta_json")):
+            if os.path.exists(os.path.join("/app", "meta.json")):
                 # Flush content if it exist
-                with open(os.path.join("/app", "meta_json"), "w") as meta_file:
+                with open(os.path.join("/app", "meta.json"), "w") as meta_file:
                     meta_file.write("")
 
-            with open(os.path.join("/app", "meta_json"), "w") as meta_file:
+            with open(os.path.join("/app", "meta.json"), "w") as meta_file:
                 meta_json = args['meta_json']
                 json.dump(json.load(meta_json), meta_file)
             
