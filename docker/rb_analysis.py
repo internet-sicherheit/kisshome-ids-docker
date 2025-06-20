@@ -67,7 +67,7 @@ def rb_write_results(rb_result_pipe_path, logger=default_logger):
     logger.info(f"Write alerts of /app/eve.json to {rb_result_pipe_path}")
     try: 
         with open(os.path.join("/app", "eve.json"), "r") as result_file:
-            filtered_results = rb_filtered_results(result_file.readlines())
+            filtered_results = rb_filter_results(result_file.readlines())
             with open(rb_result_pipe_path, "w") as result_pipe:
                 result_pipe.write(json.dumps(filtered_results))
         # Flush afterward
@@ -79,7 +79,7 @@ def rb_write_results(rb_result_pipe_path, logger=default_logger):
     logger.info(f"Alerts of /app/eve.json written to {rb_result_pipe_path}")
 
 
-def rb_filtered_results(eve_json, logger=default_logger):
+def rb_filter_results(eve_json, logger=default_logger):
     """
     Filter all valid alerts in the eve.json file
 
