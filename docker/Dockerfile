@@ -6,7 +6,7 @@ FROM debian:stable-backports
 RUN apt update && apt install -y -t stable-backports iputils-ping python3 python3-pip suricata && apt clean
 
 # Install python dependencies
-RUN pip3 install --break-system-packages flask flask-restx dpkt numpy tensorflow
+RUN pip3 install --break-system-packages flask flask-restx gunicorn dpkt numpy tensorflow
 
 # Set up suricata properly
 # Also enable et/open dataset as default and add all relevant rulesets by abuse.ch

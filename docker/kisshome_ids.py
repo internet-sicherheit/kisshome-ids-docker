@@ -14,7 +14,7 @@ from rb_analysis import *
 #from ml_analysis import *
 from ml_analysis_multiprocess import *
 from aggregator import *
-from states import set_state, EXITED
+from states import set_state, STARTED, EXITED
 
 # Each log line includes the date and time, the log level, the current function and the message
 formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
@@ -66,6 +66,9 @@ class KisshomeIDS:
 
         # Prepare rules for the rb component
         rb_prepare_rules()
+
+        # Set IDS to started
+        set_state(STARTED)
 
         self.logger.info("Init done")
 

@@ -5,6 +5,7 @@
 Script to start the demo API 
 """
 
+from datetime import datetime, timezone
 from flask import Flask, request, jsonify
 import json
 
@@ -15,9 +16,12 @@ def receive_data():
     if not request.is_json:
         return jsonify({'error': 'Expected JSON'}), 400
     data = request.get_json()
+    # Create filename with timestamp
+    timestamp = datetime.now(timezone.utc)
+    filename = f"/home/dgrossen/{timestamp}.json"
     # Save the received JSON result
-    with open('/home/dgrossen/result.json', 'w') as rfile:
-        json.dump(data, rfile)
+    with open(filename, 'w') as rfile:
+        json.dump(data, rfile, ensure_ascii=False, indent=2)
     #print(f"Received {data=}")
     return jsonify({'status': 'success'}), 200
 

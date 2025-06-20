@@ -37,6 +37,7 @@ logger.propagate = False
 pipe_lock = Lock()
 # Initialize app and make it RESTful
 app = Flask(__name__)
+
 api = Api(app, version='1.0', title=f'{ENV_NAME} API',
           description=f'A RESTful API to interact with the {ENV_NAME}')
 ns = api.namespace("", description=f"{ENV_NAME} operations")
@@ -64,8 +65,17 @@ pcap_parser.add_argument('pcap_name', location='args', type=str, required=True, 
 pcap_parser.add_argument('data', location='files', type=FileStorage, required=True, help='PCAP file')
 
 ids = KisshomeIDS()
-# Set IDS to started
-set_state(STARTED)
+
+            
+def configure_app(flask_app):
+    flask_app.config['SWAGGER_UI_DOC_EXPANSION'] = True
+    flask_app.config['RESTX_VALIDATE'] = True
+    flask_app.config['RESTX_MASK_SWAGGER'] = False
+    flask_app.config['ERROR_404_HELP'] = True  # False in prod
+
+
+# Configure API
+configure_app(app)
 
 
 @ns.route("/status")
@@ -213,14 +223,7 @@ class Log(Resource):
         except Exception as e:
             set_state(EXITED)
             return {"Result": "Failed", "Message": e}, 500
-            
-
-def configure_app(flask_app):
-    flask_app.config['SWAGGER_UI_DOC_EXPANSION'] = True
-    flask_app.config['RESTX_VALIDATE'] = True
-    flask_app.config['RESTX_MASK_SWAGGER'] = False
-    flask_app.config['ERROR_404_HELP'] = True  # False in prod
-
+        
 
 if __name__ == '__main__':
     """
@@ -229,7 +232,6 @@ if __name__ == '__main__':
     @return: nothing
     """
     logger.info(f"Start Flask API")
-    configure_app(app)
     # Does not return after calling
     app.run(host="0.0.0.0", port=5000)
     logger.info(f"Finished")

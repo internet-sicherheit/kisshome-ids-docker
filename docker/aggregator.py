@@ -7,9 +7,8 @@ Script to aggregate the data and send it back to the adapter
 
 import logging
 import requests
-import json
 
-from states import set_state, RUNNING, EXITED
+from states import get_state, set_state, ANALYZING, RUNNING, EXITED
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -46,6 +45,7 @@ def send_results(results, callback_url, logger=default_logger):
     except Exception as e:
         logger.exception(e)
         set_state(EXITED)
+        raise
     logger.debug(f"Send {results=} to {callback_url=}")
 
 
@@ -116,5 +116,6 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=de
             except Exception as e:
                 logger.exception(e)
                 set_state(EXITED)
-            # Set new state since analysis is done
-            set_state(RUNNING)
+            if get_state() == ANALYZING:
+                # Set new state since analysis is done
+                set_state(RUNNING)
