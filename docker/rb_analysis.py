@@ -97,7 +97,7 @@ def rb_filter_results(eve_json, logger=default_logger):
                 # Sometimes ether is not set
                 if "ether" in entry:
                     valid_alert = {
-                        "mac": entry["ether"], # TODO: Is mac inboud/outbound?
+                        "mac": rb_check_mac(entry["ether"]), # TODO: Is mac inboud/outbound?
                         "type": "Alert", 
                         "description": entry["alert"]["signature"], 
                         "time": entry["timestamp"]
@@ -108,6 +108,27 @@ def rb_filter_results(eve_json, logger=default_logger):
         logger.exception(f"Could not filter the results: {e}")
     logger.info("Finished filtering alerts from results")
     return alert_dictionary
+
+
+def rb_check_mac(mac_adresses, logger=default_logger):
+    """
+    Check if an alert is related to a known mac address from /app/meta.json
+
+    @param mac_adresses: all possible macs extracted from /app/eve.json
+    @return: a valid mac address as a string
+    """
+    logger.info(f"Start checking mac")
+    try: 
+        with open(os.path.join("/app", "meta.json"), "r") as meta_file:
+            meta_json = json.load(meta_file)
+            # TODO: Add examples
+            for meta_key in meta_json.keys():
+                if meta_key.lower() in mac_adresses.values():
+                    logger.info("Finished checking mac")
+                    return meta_key.lower()
+    except Exception as e:
+        set_state(EXITED)
+        logger.exception(f"Could not check mac: {e}")
 
 
 def rb_prepare_rules(logger=default_logger):
