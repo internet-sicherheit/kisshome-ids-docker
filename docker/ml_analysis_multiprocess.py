@@ -437,23 +437,27 @@ def process_packets(pool, pcap):
                 # skip if we can't parse
                 # TODO: here we may do some outlier detection or other
                 continue
+            
+            logger.info(f"{details=}")
 
             # Save necessary infos for user statistics
-            if details["direction"] == "outgoing":
-                device_statistics = user_device_statistics[details["src_mac"]]
-                if details["dst_ip"] not in device_statistics["external_ips"]:
-                    device_statistics["external_ips"][details["dst_ip"]] = {"country": details["country"], "data_volume_bytes": 0}
-                device_statistics["external_ips"][details["dst_ip"]]["data_volume_bytes"] += details["packet_length"]
-                device_statistics["data_volume"]["packet_count"] += 1
-                device_statistics["data_volume"]["data_volume_bytes"] += details["packet_length"]
+            if int(details["link_protocol"]) == 2048: # Only ipv4
+                
+                if details["direction"] == "outgoing":
+                    device_statistics = user_device_statistics[details["src_mac"]]
+                    if details["dst_ip"] not in device_statistics["external_ips"]:
+                        device_statistics["external_ips"][details["dst_ip"]] = {"country": details["country"], "data_volume_bytes": 0}
+                    device_statistics["external_ips"][details["dst_ip"]]["data_volume_bytes"] += details["packet_length"]
+                    device_statistics["data_volume"]["packet_count"] += 1
+                    device_statistics["data_volume"]["data_volume_bytes"] += details["packet_length"]
 
-            elif details["direction"] == "incoming":
-                device_statistics = user_device_statistics[details["dst_mac"]]
-                if details["src_ip"] not in device_statistics["external_ips"]:
-                    device_statistics["external_ips"][details["src_ip"]] = {"country": details["country"], "data_volume_bytes": 0}
-                device_statistics["external_ips"][details["src_ip"]]["data_volume_bytes"] += details["packet_length"]
-                device_statistics["data_volume"]["packet_count"] += 1
-                device_statistics["data_volume"]["data_volume_bytes"] += details["packet_length"]
+                elif details["direction"] == "incoming":
+                    device_statistics = user_device_statistics[details["dst_mac"]]
+                    if details["src_ip"] not in device_statistics["external_ips"]:
+                        device_statistics["external_ips"][details["src_ip"]] = {"country": details["country"], "data_volume_bytes": 0}
+                    device_statistics["external_ips"][details["src_ip"]]["data_volume_bytes"] += details["packet_length"]
+                    device_statistics["data_volume"]["packet_count"] += 1
+                    device_statistics["data_volume"]["data_volume_bytes"] += details["packet_length"]
 
             else:
                 pass  # TODO: Handle other packet types like multicast, etc.
@@ -517,7 +521,8 @@ def flush_results(result_pipe, results, device_statistics, analysis_duration_ms,
     formatted_devices = []
 
     for score in results:
-        result_text += f"{score}\n"
+        #result_text += f"{score}\n"
+        logger.debug(f"{score}\n")
 
     for mac, stats in device_statistics.items():
         mac_str = ":".join(['%02x' % b for b in mac]).lower()
@@ -540,7 +545,8 @@ def flush_results(result_pipe, results, device_statistics, analysis_duration_ms,
         }
     }
 
-    result_text += "\n" + json.dumps(result_data, indent=4)
+    #result_text += "\n" + json.dumps(result_data, indent=4)
+    result_text = json.dumps(result_data, indent=4)
 
     #with open(RESULT_FILE, "w") as fw:
         #fw.write(result_text)

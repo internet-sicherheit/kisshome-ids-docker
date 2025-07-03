@@ -27,8 +27,6 @@ COPY aggregator.py /app/
 COPY kisshome_ids.py /app/
 COPY ip_to_country.csv /app/
 COPY ip_to_asn.csv /app/
-# temporary placeholder, we will get the metajson from the user later
-#COPY extras/devices.json /app/ 
 
 RUN chmod a+x /app/flask_api.py
 RUN chmod a+x /app/setup.py

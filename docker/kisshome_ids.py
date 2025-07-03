@@ -50,7 +50,7 @@ class KisshomeIDS:
         self.fl_url = ""
         self.pcap_name = ""
         self.allow_training = False
-        self.callback_url = ""
+        self.callback_url = None
 
         # Create a list for processes to control them while the IDS is running
         self.analysis_processes = []

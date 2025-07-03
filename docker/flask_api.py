@@ -42,9 +42,17 @@ api = Api(app, version='1.0', title=f'{ENV_NAME} API',
           description=f'A RESTful API to interact with the {ENV_NAME}')
 ns = api.namespace("", description=f"{ENV_NAME} operations")
 # Models for JSON like requests or responses
+status_configuration_model = ns.model("Status configuration",
+    {
+        "Callback url": fields.String(required=True, description="The current callback URL of the IDS"),
+        "Allow training": fields.String(required=True, description="The current value for allowing training of the IDS"),
+        "Meta json": fields.String(required=True, description="The current meta.json of the IDS")
+    }
+)
 status_message_model = ns.model("Status message",
     {
         "Status": fields.String(required=True, description="The status of the IDS"),
+        "Configuration": fields.Nested(status_configuration_model, required=True, description="The current configuration of the IDS"),
         "Has Federated Learning server connection": fields.String(required=True, description="The connection status of the Federated Learning Server")
     }
 )
@@ -72,6 +80,7 @@ def configure_app(flask_app):
     flask_app.config['RESTX_VALIDATE'] = True
     flask_app.config['RESTX_MASK_SWAGGER'] = False
     flask_app.config['ERROR_404_HELP'] = True  # False in prod
+    logger.info(f"Start Flask API")
 
 
 # Configure API
@@ -86,8 +95,17 @@ class Status(Resource):
     def get(self):
         """Returns the status of our environment"""
         try:
+            # Load meta_json if it exists 
+            meta_json = {}
+            if os.path.exists(os.path.join("/app", "meta.json")):
+                with open(os.path.join("/app", "meta.json"), "r") as meta_file:
+                    meta_json = json.load(meta_file)
             # Return json
-            return {"Result": "Success", "Message": {"Status": get_state(), "Has Federated Learning server connection": ids.has_fl_connection()}}, 200
+            message = {"Status": get_state(), 
+                       "Configuration": {"Callback url": ids.callback_url, "Allow training": ids.allow_training, "Meta json": meta_json}, 
+                       "Has Federated Learning server connection": ids.has_fl_connection()}
+            logger.debug(f"Current status: {message}")
+            return {"Result": "Success", "Message": message}, 200
         except Exception as e:
             set_state(EXITED)
             return {"Result": "Failed", "Message": e}, 500
@@ -124,6 +142,8 @@ class Configuration(Resource):
             
             # Set state to running now
             set_state(RUNNING)
+
+            logger.debug(f"New configuration: callback_url={args['callback_url']}, allow_training={args['allow_training']}, meta_json={args['meta_json']}")
 
             return {"Result": "Success", "Message": "Configuration set"}, 200
         except Exception as e:
@@ -179,6 +199,8 @@ class Pcap(Resource):
                         rb_pipe.write(pcap)
                         ml_pipe.write(pcap)
 
+                        logger.debug(f"Pipes written with bytes from {pcap_name=}")
+
                 return {"Result": "Success", "Message": f"Pcap {pcap_name} received, start {ENV_NAME}"}, 200
             except Exception as e:
                 set_state(EXITED)
@@ -225,13 +247,13 @@ class Log(Resource):
             return {"Result": "Failed", "Message": e}, 500
         
 
-if __name__ == '__main__':
-    """
-    Main
-
-    @return: nothing
-    """
-    logger.info(f"Start Flask API")
+#if __name__ == '__main__':
+    #"""
+    #Main
+    
+    #@return: nothing
+    #"""
+    #logger.info(f"Start Flask API")
     # Does not return after calling
-    app.run(host="0.0.0.0", port=5000)
-    logger.info(f"Finished")
+    #app.run(host="0.0.0.0", port=5000)
+    #logger.info(f"Finished")

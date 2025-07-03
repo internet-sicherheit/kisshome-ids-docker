@@ -11,6 +11,7 @@ import requests
 from states import get_state, set_state, ANALYZING, RUNNING, EXITED
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from ast import literal_eval
 
 # Each log line includes the date and time, the log level, the current function and the message
 formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
@@ -40,6 +41,7 @@ def send_results(results, callback_url, logger=default_logger):
     try:
         #http://172.17.0.1:4711/data -> docker0 bridge on the host
         logger.info(f"Sending {results=} to {callback_url=}")
+
         resp = requests.post(callback_url, json=results, verify=False)
         resp.raise_for_status()
     except Exception as e:
@@ -48,6 +50,26 @@ def send_results(results, callback_url, logger=default_logger):
         raise
     logger.debug(f"Send {results=} to {callback_url=}")
 
+
+def parse_pipes(rb_pipe_dict, ml_pipe_dict, logger=default_logger):
+    """
+    Parse the pipe data and create a new json object
+    
+    @param rb_pipe_json: pipe with the rb result content as a dict
+    @param ml_pipe_json: pipe with the ml result content as a dict
+    @param logger: logger for logging, default default_logger
+    @return: analysis results as a dict
+    """
+    # Parse incoming data from pipes to a new dict to collect all gathered informations
+    analysis_results = {"statistics": {}, "detections": []}
+
+    analysis_results["detections"] = rb_pipe_dict["detections"]
+    analysis_results["statistics"]["suricata_total_rules"] = rb_pipe_dict["total_rules"]
+    analysis_results["statistics"] = ml_pipe_dict["statistics"]
+
+    logger.debug(f"Finished parsing pipes to dict: {analysis_results}")
+    
+    return analysis_results
 
 def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=default_logger):
     """
@@ -90,7 +112,7 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=de
             #                         "bytes": 5900
             #                     }
             #                 ],
-            #                 "bytes": 15900ml_pipe
+            #                 "bytes": 15900
             #             }
             #         ]
             #     },
@@ -109,9 +131,8 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=de
                         "time": datetime.now(ZoneInfo("Europe/Berlin")).strftime("%d.%m.%Y %H:%M:%S %Z%z"), 
                         "result": {"status": "success"}
                         }
-                ml = {"ml": ml_pipe.read().strip()}
-                rb = {"rb": rb_pipe.read().strip()}
-                results = {**info, **ml, **rb}
+                data = parse_pipes(dict(literal_eval(rb_pipe.read().strip())), dict(literal_eval(ml_pipe.read().strip())))
+                results = {**info, **data}
                 send_results(results, callback_url)
             except Exception as e:
                 logger.exception(e)
