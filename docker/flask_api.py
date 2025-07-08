@@ -33,12 +33,16 @@ logger.setLevel(logging.DEBUG)
 logger.propagate = False
 
 
+# Version
+VERSION = "1.1.0"
+
 # Initialize Lock for fifo pipes
 pipe_lock = Lock()
+
 # Initialize app and make it RESTful
 app = Flask(__name__)
 
-api = Api(app, version='1.0', title=f'{ENV_NAME} API',
+api = Api(app, version=VERSION, title=f'{ENV_NAME} API',
           description=f'A RESTful API to interact with the {ENV_NAME}')
 ns = api.namespace("", description=f"{ENV_NAME} operations")
 # Models for JSON like requests or responses
@@ -51,6 +55,7 @@ status_configuration_model = ns.model("Status configuration",
 )
 status_message_model = ns.model("Status message",
     {
+        "Version": fields.String(required=True, description="The version of the IDS"),
         "Status": fields.String(required=True, description="The status of the IDS"),
         "Configuration": fields.Nested(status_configuration_model, required=True, description="The current configuration of the IDS"),
         "Has Federated Learning server connection": fields.String(required=True, description="The connection status of the Federated Learning Server")
@@ -101,7 +106,8 @@ class Status(Resource):
                 with open(os.path.join("/app", "meta.json"), "r") as meta_file:
                     meta_json = json.load(meta_file)
             # Return json
-            message = {"Status": get_state(), 
+            message = {"Version": VERSION,
+                       "Status": get_state(),
                        "Configuration": {"Callback url": ids.callback_url, "Allow training": ids.allow_training, "Meta json": meta_json}, 
                        "Has Federated Learning server connection": ids.has_fl_connection()}
             logger.debug(f"Current status: {message}")
