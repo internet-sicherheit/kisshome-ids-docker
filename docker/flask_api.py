@@ -11,7 +11,7 @@ import json
 import time
 
 from flask import Flask, request
-from flask_restx import Api, Resource, fields, reqparse
+from flask_restx import Api, Resource, fields, reqparse, inputs
 from werkzeug.datastructures import FileStorage
 from threading import Lock
 from kisshome_ids import KisshomeIDS
@@ -34,7 +34,7 @@ logger.propagate = False
 
 
 # Version
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 
 # Initialize Lock for fifo pipes
 pipe_lock = Lock()
@@ -49,7 +49,7 @@ ns = api.namespace("", description=f"{ENV_NAME} operations")
 status_configuration_model = ns.model("Status configuration",
     {
         "Callback url": fields.String(required=True, description="The current callback URL of the IDS"),
-        "Allow training": fields.String(required=True, description="The current value for allowing training of the IDS"),
+        "Allow training": fields.Boolean(required=True, description="The current value for allowing training of the IDS"),
         "Meta json": fields.String(required=True, description="The current meta.json of the IDS")
     }
 )
@@ -58,7 +58,7 @@ status_message_model = ns.model("Status message",
         "Version": fields.String(required=True, description="The version of the IDS"),
         "Status": fields.String(required=True, description="The status of the IDS"),
         "Configuration": fields.Nested(status_configuration_model, required=True, description="The current configuration of the IDS"),
-        "Has Federated Learning server connection": fields.String(required=True, description="The connection status of the Federated Learning Server")
+        "Has Federated Learning server connection": fields.Boolean(required=True, description="The connection status of the Federated Learning Server")
     }
 )
 status_model = ns.model("Status",
@@ -71,7 +71,7 @@ status_model = ns.model("Status",
 config_parser = reqparse.RequestParser()
 config_parser.add_argument('meta_json', location='files', type=FileStorage, required=True, help='The list with device MACs for filtering')
 config_parser.add_argument('callback_url', location='form', type=str, required=True, help='The URL to send the results of the IDS')
-config_parser.add_argument('allow_training', location='form', type=bool, required=True, help='Is training with the Federated Learning Server allowed')
+config_parser.add_argument('allow_training', location='form', type=inputs.boolean, required=True, help='Is training with the Federated Learning Server allowed') # Do not use type=bool
 
 pcap_parser = reqparse.RequestParser()
 pcap_parser.add_argument('pcap_name', location='args', type=str, required=True, help='The name of the pcap file')

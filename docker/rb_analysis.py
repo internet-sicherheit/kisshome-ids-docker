@@ -9,6 +9,7 @@ import os
 import logging
 import json
 import subprocess
+import time
 
 from states import set_state, EXITED
 
@@ -40,34 +41,38 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, logger=default_logger):
     logger.info(f"Start using suricata to analyze pcap data")
     # Use suricata on the provided pcap content
     try:
+        cmd = f"suricata -c /etc/suricata/suricata.yaml -vvv -l /app -r {rb_pcap_pipe_path} --pcap-file-continuous"
+        logger.debug(f"Invoking Suricata with {cmd=}")
         while True:
-            cmd = f"suricata -c /etc/suricata/suricata.yaml -vvv -l /app -r {rb_pcap_pipe_path} --pcap-file-continuous"
-            logger.debug(f"Invoking suricata with {cmd=}")
+            logger.info("Analyzing pcap with Suricata")
+            start_time = time.time()
             suricata_process = subprocess.run(cmd, capture_output=True, shell=True)
             if suricata_process.returncode != 0:
                 # Something went wrong
                 logger.warning(f"Suricata process had a non zero exit code: {suricata_process}")
             else:
-                logger.info(f"Suricata done: {suricata_process}")
+                duration_s = time.time() - start_time
+                logger.info(f"Suricata done: {suricata_process}, took {duration_s}s")
                 # Write results
-                rb_write_results(rb_result_pipe_path=rb_result_pipe_path)
+                rb_write_results(rb_result_pipe_path, duration_s)
     except Exception as e:
         set_state(EXITED)
-        logger.exception(f"Could not analyze the pcap with suricata: {e}")
+        logger.exception(f"Could not analyze the pcap with Suricata: {e}")
 
 
-def rb_write_results(rb_result_pipe_path, logger=default_logger):
+def rb_write_results(rb_result_pipe_path, duration, logger=default_logger):
     """
     Write the matching alert content of the eve.json to the result pipe
 
     @param rb_result_pipe_path: path to the pipe for the result content
+    @param duration: the time the suricata engine needed for the analysis in seconds
     @param logger: logger for logging, default_logger
     @return: content as a string
     """
     logger.info(f"Write alerts of /app/eve.json to {rb_result_pipe_path}")
     try: 
         with open(os.path.join("/app", "eve.json"), "r") as result_file:
-            filtered_results = rb_filter_results(result_file.readlines())
+            filtered_results = rb_filter_results(result_file.readlines(), duration)
             with open(rb_result_pipe_path, "w") as result_pipe:
                 result_pipe.write(json.dumps(filtered_results))
         # Flush afterward
@@ -79,25 +84,27 @@ def rb_write_results(rb_result_pipe_path, logger=default_logger):
     logger.info(f"Alerts of /app/eve.json written to {rb_result_pipe_path}")
 
 
-def rb_filter_results(eve_json, logger=default_logger):
+def rb_filter_results(eve_json, duration, logger=default_logger):
     """
     Filter all valid alerts in the eve.json file
 
     @param eve_json: json string with the content of the eve.json file
+    @param duration: the time the suricata engine needed for the analysis in seconds
     @param logger: logger for logging, default default_logger
     @return: all valid alerts as a json string
     """
     logger.info("Start filtering alerts from results")
-    alert_dictionary = {"detections": [], "total_rules": rb_count_rules()}
+    alert_dictionary = {"detections": [], "statistics": {"suricataTotalRules": rb_count_rules(), "suricataAalysisDurationMs": duration * 1000}}
     try:
         for line in eve_json:
             entry = json.loads(line)
             if entry["event_type"] == "alert":
                 logger.debug(f"{entry=}")
-                # Sometimes ether is not set
+                # Sometimes ether is not set, skip
                 if "ether" in entry:
                     valid_alert = {
-                        "mac": rb_check_mac(entry["ether"]), # TODO: Is mac inboud/outbound?
+                        "source": "Suricata",
+                        "mac": rb_check_mac(entry["ether"]),
                         "type": "Alert", 
                         "description": entry["alert"]["signature"], 
                         "time": entry["timestamp"]
@@ -139,13 +146,13 @@ def rb_prepare_rules(logger=default_logger):
     @return: nothing
     """
     try:
-        # Not case sensitive pattern to filter IoT related rules
-        # Include 'microsoft' or 'windows' since it can be mentioned as a source or menioned in a user agent'
+        # Not case sensitive pattern to filter important rules
+        # Exclude 'microsoft' or 'windows' since it can be mentioned as a source or menioned in a user agent'
         cmd = (f"grep -viE 'et info' " # Blacklist with -v
                f"/var/lib/suricata/rules/suricata.rules | "
                f"grep -iE 'sslbl|et malware|confidence high|signature_severity major' " # Whitelist
                f"> /var/lib/suricata/rules/filtered.rules && "
-               f"mv /var/lib/suricata/rules/filtered.rules /var/lib/suricata/rules/suricata.rules") # TODO: Whitelisting vs. Blacklisting? Or both?
+               f"mv /var/lib/suricata/rules/filtered.rules /var/lib/suricata/rules/suricata.rules")
         logger.debug(f"Preparing rules with {cmd=}")
         preparing_process = subprocess.run(cmd, capture_output=True, shell=True)
         if preparing_process.returncode != 0:

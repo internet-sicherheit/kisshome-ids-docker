@@ -63,9 +63,8 @@ def parse_pipes(rb_pipe_dict, ml_pipe_dict, logger=default_logger):
     # Parse incoming data from pipes to a new dict to collect all gathered informations
     analysis_results = {"statistics": {}, "detections": []}
 
-    analysis_results["detections"] = rb_pipe_dict["detections"]
-    analysis_results["statistics"] = ml_pipe_dict["statistics"]
-    analysis_results["statistics"]["suricata_total_rules"] = rb_pipe_dict["total_rules"]
+    analysis_results["detections"] = rb_pipe_dict["detections"] + ml_pipe_dict["detections"]
+    analysis_results["statistics"] = {**rb_pipe_dict["statistics"], **ml_pipe_dict["statistics"]}
 
     logger.debug(f"Finished parsing pipes to dict: {analysis_results}")
     
