@@ -15,32 +15,32 @@ RUN suricata-update && suricata-update enable-source abuse.ch/sslbl-blacklist &&
 # Set up working directory
 WORKDIR /app
 
+# Copy suricata configuration and rules
+COPY kisshome.rules /app/
+COPY suricata.yaml /app/
+
+# Copy csv files
+COPY ip_to_country.csv /app/
+COPY ip_to_asn.csv /app/
+
 # Copy the python and bash scripts
 COPY flask_api.py /app/
 COPY setup.py /app/
 COPY states.py /app/
 COPY start.sh /app/
-COPY ml_analysis.py /app/
 COPY ml_analysis_multiprocess.py /app/
 COPY rb_analysis.py /app/
 COPY aggregator.py /app/
 COPY kisshome_ids.py /app/
-COPY ip_to_country.csv /app/
-COPY ip_to_asn.csv /app/
 
 RUN chmod a+x /app/flask_api.py
 RUN chmod a+x /app/setup.py
 RUN chmod a+x /app/states.py
 RUN chmod a+x /app/start.sh
-RUN chmod a+x /app/ml_analysis.py
 RUN chmod a+x /app/ml_analysis_multiprocess.py
 RUN chmod a+x /app/rb_analysis.py
 RUN chmod a+x /app/aggregator.py
 RUN chmod a+x /app/kisshome_ids.py
-
-# Copy suricata configuration and rules
-COPY kisshome.rules /etc/suricata/rules/kisshome.rules
-COPY suricata.yaml /etc/suricata/suricata.yaml
 
 # Open port 5000 for the API
 EXPOSE 5000

@@ -525,26 +525,28 @@ def flush_results(result_pipe, results, device_statistics, analysis_duration_ms,
     for score in results:
         #result_text += f"{score}\n"
         # TODO: TEST!!!
-        if score > 0.5:
-            warning = {
-                "source": "ML",
-                "mac": "TODO", # TODO: Only scores available here
-                "type": "Warning", 
-                "description": "Unusual behaviour", 
-                "time": "TODO", # TODO: Only scores available here
-                "score": score
-            }
-            detections.append(warning)
         if score > 0.8:
             alert = {
                 "source": "ML",
                 "mac": "TODO", # TODO: Only scores available here
                 "type": "Alert", 
                 "description": "Anomaly detected", 
-                "time": "TODO", # TODO: Only scores available here
+                "first_occurrence": "TODO", # TODO: Only scores available here
+                "number_occurrences": 1, # Start with 1
                 "score": score
             }
             detections.append(alert)
+        elif score > 0.5:
+            warning = {
+                "source": "ML",
+                "mac": "TODO", # TODO: Only scores available here
+                "type": "Warning", 
+                "description": "Unusual behaviour", 
+                "first_occurrence": "TODO", # TODO: Only scores available here
+                "number_occurrences": 1, # Start with 1
+                "score": score
+            }
+            detections.append(warning)
         #logger.debug(f"{score}\n")
 
     for mac, stats in device_statistics.items():

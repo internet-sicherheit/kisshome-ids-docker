@@ -10,6 +10,7 @@ import logging
 import json
 import subprocess
 import time
+import tempfile
 
 from states import set_state, EXITED
 
@@ -29,6 +30,42 @@ default_logger.setLevel(logging.DEBUG)
 default_logger.propagate = False
 
 
+# Socket created by the suricata deamon
+RB_SOCKET = ""
+
+
+def rb_start_deamon(logger=default_logger):
+    """
+    Start suricata by using its deamon feature
+    
+    @param logger: logger for logging, default_logger
+    @return: nothing
+    """
+    try:
+        cmd = f"suricata -c /app/suricata.yaml --unix-socket -D"
+        logger.debug(f"Invoking Suricata deamon with {cmd=}")
+        suricatad_process = subprocess.run(cmd, capture_output=True, shell=True)
+        if suricatad_process.returncode != 0:
+            # Something went wrong
+            logger.warning(f"Suricata deamon process had a non zero exit code: {suricatad_process}")
+            raise Exception(suricatad_process) 
+        else:
+            is_ready = False
+            while not is_ready:
+                with open(os.path.join("/app", "suricata.log"), "r") as log_file:
+                    for log_line in log_file.readlines():
+                        global RB_SOCKET
+                        if "unix socket" in log_line and not RB_SOCKET:
+                            RB_SOCKET = str(log_line).split("'")[1] # Parse socket name from line
+                            logger.debug(f"Socket created at: {RB_SOCKET}")
+                        if "Engine started" in log_line:
+                            is_ready = True # Deamon has created socket and started engine
+                            break
+            logger.info(f"Suricata deamon started: {suricatad_process}")
+    except Exception as e:
+        set_state(EXITED)
+        logger.exception(f"Could not start Suricata deamon: {e}")
+
 def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, logger=default_logger):
     """
     Analyze the network flow with rules from suricata
@@ -41,20 +78,49 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, logger=default_logger):
     logger.info(f"Start using suricata to analyze pcap data")
     # Use suricata on the provided pcap content
     try:
-        cmd = f"suricata -c /etc/suricata/suricata.yaml -vvv -l /app -r {rb_pcap_pipe_path} --pcap-file-continuous"
-        logger.debug(f"Invoking Suricata with {cmd=}")
         while True:
-            logger.info("Analyzing pcap with Suricata")
-            start_time = time.time()
-            suricata_process = subprocess.run(cmd, capture_output=True, shell=True)
-            if suricata_process.returncode != 0:
-                # Something went wrong
-                logger.warning(f"Suricata process had a non zero exit code: {suricata_process}")
-            else:
-                duration_s = time.time() - start_time
-                logger.info(f"Suricata done: {suricata_process}, took {duration_s}s")
-                # Write results
-                rb_write_results(rb_result_pipe_path, duration_s)
+            # Blocks until the writer has finished its job
+            with open(rb_pcap_pipe_path, "rb") as rb_pcap_pipe:
+                # Write the data to a tempfile
+                temp_pcap = None
+                # Delete manually
+                with tempfile.NamedTemporaryFile(delete=False) as pcap_file:
+                    pcap_file.write(rb_pcap_pipe.read())
+                    temp_pcap = pcap_file.name
+                    logger.debug(f"Created temp file {temp_pcap}")
+                logger.info("Analyzing pcap with Suricata")
+                cmd = f"suricatasc {RB_SOCKET}"
+                input = f"pcap-file {temp_pcap} /app\nquit\n"
+                logger.debug(f"Invoking Suricata with {cmd=} and with {input=} and quit after")
+                start_time = time.time()
+                suricata_process = subprocess.run(cmd, input=input, text=True, capture_output=True, shell=True)
+                if suricata_process.returncode != 0:
+                    # Something went wrong
+                    logger.warning(f"Suricata process had a non zero exit code: {suricata_process}") # TODO: Do we want to raise manually?
+                    raise Exception(suricata_process) 
+                else:
+                    has_finished = False
+                    while not has_finished:
+                        cmd = f"suricatasc {RB_SOCKET}"
+                        input = f"pcap-file-number\nquit\n"
+                        logger.debug(f"Invoking waiting Suricata with {cmd=} and with {input=} and quit after")
+                        waiting_process = subprocess.run(cmd, input=input, text=True, capture_output=True, shell=True)
+                        if waiting_process.returncode != 0:
+                            # Something went wrong
+                            logger.warning(f"Suricata waiting process had a non zero exit code: {suricata_process}") # TODO: Do we want to raise manually?
+                            raise Exception(suricata_process) 
+                        else:
+                            if "Success:\n0" in waiting_process.stdout:
+                                has_finished = True # Done processing the pcap file
+                                break
+                    duration_s = time.time() - start_time
+                    logger.info(f"Suricata done: {suricata_process}, took {duration_s}s")
+                    # Unlink tempfile (delete)
+                    if temp_pcap:
+                        os.unlink(temp_pcap)
+                        logger.debug(f"Deleted temp file {temp_pcap}")
+                    # Write results
+                    rb_write_results(rb_result_pipe_path, duration_s)
     except Exception as e:
         set_state(EXITED)
         logger.exception(f"Could not analyze the pcap with Suricata: {e}")
@@ -102,14 +168,24 @@ def rb_filter_results(eve_json, duration, logger=default_logger):
                 logger.debug(f"{entry=}")
                 # Sometimes ether is not set, skip
                 if "ether" in entry:
-                    valid_alert = {
+                    new_alert = {
                         "source": "Suricata",
                         "mac": rb_check_mac(entry["ether"]),
                         "type": "Alert", 
                         "description": entry["alert"]["signature"], 
-                        "time": entry["timestamp"]
+                        "first_occurrence": entry["timestamp"],
+                        "number_occurrences": 1 # Start with 1
                         }
-                    alert_dictionary["detections"].append(valid_alert)
+                    # Before appending, check if the new alert is already present to update occurences
+                    has_alert = False
+                    for alert in alert_dictionary["detections"]:
+                        if alert["mac"] == new_alert["mac"] and alert["description"] == new_alert["description"]:
+                            alert["number_occurrences"] += 1
+                            has_alert = True
+                            break
+                    # Only add new alerts
+                    if not has_alert:
+                        alert_dictionary["detections"].append(new_alert)
     except Exception as e:
         set_state(EXITED)
         logger.exception(f"Could not filter the results: {e}")
@@ -147,10 +223,10 @@ def rb_prepare_rules(logger=default_logger):
     """
     try:
         # Not case sensitive pattern to filter important rules
-        # Exclude 'microsoft' or 'windows' since it can be mentioned as a source or menioned in a user agent'
-        cmd = (f"grep -viE 'et info' " # Blacklist with -v
+        # Exclude 'microsoft' since it can be mentioned as a source or menioned in a user agent'
+        cmd = (f"grep -viE 'et info|affected_product windows' " # Blacklist with -v
                f"/var/lib/suricata/rules/suricata.rules | "
-               f"grep -iE 'sslbl|et malware|confidence high|signature_severity major' " # Whitelist
+               f"grep -iE 'kisshome|sslbl|et malware|confidence high|signature_severity major' " # Whitelist
                f"> /var/lib/suricata/rules/filtered.rules && "
                f"mv /var/lib/suricata/rules/filtered.rules /var/lib/suricata/rules/suricata.rules")
         logger.debug(f"Preparing rules with {cmd=}")

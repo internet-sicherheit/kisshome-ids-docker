@@ -11,7 +11,6 @@ import subprocess
 from multiprocessing import *
 from setup import *
 from rb_analysis import *
-#from ml_analysis import *
 from ml_analysis_multiprocess import *
 from aggregator import *
 from states import set_state, STARTED, EXITED
@@ -64,10 +63,11 @@ class KisshomeIDS:
         self.configure_analysis()
         self.configure_aggregation()
 
-        # Prepare rules for the rb component
+        # Prepare rules and start deamon for the rb component
         rb_prepare_rules()
+        rb_start_deamon()
 
-        # Set IDS to started
+        # Set IDS started
         set_state(STARTED)
 
         self.logger.info("Init done")
@@ -115,12 +115,12 @@ class KisshomeIDS:
         """
         Update the configuration params of our IDS environment
 
-        @param callback_url: URL of the adapter to recieve the results
+        @param callback_url: URL of the adapter for receiving the results
         @param allow_training: a var to check if the user allows training
         @param fl_url: URL of our federated learning server, default string "https://fl.if-is.net"
         @return: nothing
         """
-        # Stop analysis first since the are writing processes on the pipe
+        # Stop analysis first since there are writing processes on the pipe
         self.stop_analysis()
         self.stop_aggregation()
 

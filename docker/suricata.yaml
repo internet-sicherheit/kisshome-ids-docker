@@ -58,7 +58,7 @@ vars:
 # The default logging directory.  Any log or output file will be
 # placed here if it's not specified with a full path name. This can be
 # overridden with the -l command line parameter.
-default-log-dir: /var/log/suricata
+default-log-dir: /app
 
 # Global stats configuration
 stats:
@@ -1293,7 +1293,7 @@ host-mode: auto
 # activated in live capture mode. You can use the filename variable to set
 # the file name of the socket.
 unix-command:
-  enabled: auto
+  enabled: yes
   #filename: custom.socket
 
 # Magic file. The extension .mgc is added to the value here.

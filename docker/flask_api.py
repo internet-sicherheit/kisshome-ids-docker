@@ -34,7 +34,7 @@ logger.propagate = False
 
 
 # Version
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 
 # Initialize Lock for fifo pipes
 pipe_lock = Lock()
@@ -119,7 +119,9 @@ class Status(Resource):
 
 @ns.route("/configure")
 @api.doc(responses={200: f"Configuration set", 
-                    500: f"Internal Server Error"}, 
+                    429: f"{ENV_NAME} busy",
+                    500: f"Internal Server Error",
+                    503: f"{ENV_NAME} unavailable"}, 
          params={"meta_json": {"description": "The list with device MACs for filtering", "type": "json"},
                  "callback_url": {"description": "The URL to send the results of the IDS", "type": "string"},
                  "allow_training": {"description": "Is training with the Federated Learning Server allowed", "type": "boolean"}})
@@ -127,49 +129,60 @@ class Configuration(Resource):
     @ns.expect(config_parser)
     def post(self):
         """Set configuration values, like the meta_json file, the callback URL or if training is allowed"""
-        try:
-            # Set state to prevent sending files via /pcap until it is done
-            set_state(CONFIGURING)
-            
-            args = config_parser.parse_args()
+        if EXITED in get_state():
+            # IDS has exited, return 503 service unavailable
+            return {"Result": "Failed", "Message": f"{ENV_NAME} has exited, state: {get_state()}"}, 503
+        if CONFIGURING in get_state():
+            # IDS is configuring, return 429 too many request
+            return {"Result": "Failed", "Message": f"{ENV_NAME} busy, state: {get_state()}"}, 429
+        if STARTED in get_state() or RUNNING in get_state() or ANALYZING in get_state():
+            try:
+                # Set state to prevent sending files via /pcap until it is done
+                set_state(CONFIGURING)
+                
+                args = config_parser.parse_args()
 
-            # Update config
-            ids.update_configuration(args['callback_url'], args['allow_training'])
-            
-            # Write meta_json directly to disk
-            if os.path.exists(os.path.join("/app", "meta.json")):
-                # Flush content if it exist
+                # Update config
+                ids.update_configuration(args['callback_url'], args['allow_training'])
+                
+                # Write meta_json directly to disk
+                if os.path.exists(os.path.join("/app", "meta.json")):
+                    # Flush content if it exist
+                    with open(os.path.join("/app", "meta.json"), "w") as meta_file:
+                        meta_file.write("")
+
                 with open(os.path.join("/app", "meta.json"), "w") as meta_file:
-                    meta_file.write("")
+                    meta_json = args['meta_json']
+                    json.dump(json.load(meta_json), meta_file)
+                
+                # Set state to running now
+                set_state(RUNNING)
 
-            with open(os.path.join("/app", "meta.json"), "w") as meta_file:
-                meta_json = args['meta_json']
-                json.dump(json.load(meta_json), meta_file)
-            
-            # Set state to running now
-            set_state(RUNNING)
+                logger.debug(f"New configuration: callback_url={args['callback_url']}, allow_training={args['allow_training']}, meta_json={args['meta_json']}")
 
-            logger.debug(f"New configuration: callback_url={args['callback_url']}, allow_training={args['allow_training']}, meta_json={args['meta_json']}")
-
-            return {"Result": "Success", "Message": "Configuration set"}, 200
-        except Exception as e:
-            set_state(EXITED)
-            return {"Result": "Failed", "Message": e}, 500
+                return {"Result": "Success", "Message": "Configuration set"}, 200
+            except Exception as e:
+                set_state(EXITED)
+                return {"Result": "Failed", "Message": e}, 500
         
 
 @ns.route("/pcap")
 @api.doc(responses={200: f"Pcap received, start {ENV_NAME}", 
-                    400: f"Not configured",  
+                    409: f"Not configured",  
                     429: f"{ENV_NAME} busy", 
-                    500: f"Internal Server Error"},
+                    500: f"Internal Server Error",
+                    503: f"{ENV_NAME} unavailable"},
          params={"pcap_name": {"description": "The name of the pcap file", "type": "string"}})
 class Pcap(Resource):
     @ns.expect(pcap_parser)
     def post(self):
         """Receives pcap data and writes it to the named pipes"""
+        if EXITED in get_state():
+            # IDS has exited, return 503 service unavailable
+            return {"Result": "Failed", "Message": f"{ENV_NAME} has exited, state: {get_state()}"}, 503
         if STARTED in get_state():
-            # IDS is not configured yet, return 400
-            return {"Result": "Failed", "Message": f"Not configured, state: {get_state()}"}, 400
+            # IDS is not configured yet, return 409 conflict
+            return {"Result": "Failed", "Message": f"Not configured, state: {get_state()}"}, 409
         if ANALYZING in get_state() or CONFIGURING in get_state():
             # IDS is analysing or configuring, return 429 too many request
             return {"Result": "Failed", "Message": f"{ENV_NAME} busy, state: {get_state()}"}, 429
