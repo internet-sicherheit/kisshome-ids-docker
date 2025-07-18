@@ -218,7 +218,7 @@ class Pcap(Resource):
                         rb_pipe.write(pcap)
                         ml_pipe.write(pcap)
 
-                        logger.debug(f"Pipes written with bytes from {pcap_name=}")
+                        logger.debug(f"Pipes written with {len(pcap)} bytes from {pcap_name=}")
 
                 return {"Result": "Success", "Message": f"Pcap {pcap_name} received, start {ENV_NAME}"}, 200
             except Exception as e:

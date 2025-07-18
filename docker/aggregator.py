@@ -85,7 +85,9 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=de
     while True:
         # Blocks until both writer have finished their jobs
         with open(rb_result_pipe, "r") as rb_pipe, open(ml_result_pipe, "r") as ml_pipe:
-            # TODO Update data var structure
+            # TODO: Update data var structure
+            #
+            # TODO: First version (Lastenheft)
             #
             # Example:
             # {
@@ -124,6 +126,56 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=de
             #         }
             #     ]
             # }
+            #
+            #
+            #
+            # TODO: Second version (Gerhard, 17-07-2025)
+            #
+            # "detections": [                                               # Liste mit Eintrag für jedes Gerät aus der Config
+            # {
+            # "mac": "00:07:e9:13:37:46",
+            # "suricata": [                                                 # Liste mit Suricata Results
+            #     {
+            #     "type": "Alert",
+            #     "description": "ET MALWARE DDoS.XOR Checkin via HTTP",
+            #     "first_occurrence": "2024-03-06T02:45:44.595361+0000",
+            #     "num_occurrences": "2"
+            #     }
+            # ],
+            # "ML": {                                                       # Dict mit ML Result
+            #     "type": "Warning",
+            #     "description": "Anomaly detected",
+            #     "first_occurrence": "TODO",                                 # Erstes packet, Beginn erstes window, Beginn erster flow... mit detection
+            #     "num_occurrences": "100",                                   # Anzahl results über threshold
+            #     "score": 0.8152504444122314,                                # Wenn  detection dann Durchschintt der Scores die über treshold lagen?
+            # }
+            # },
+            # {
+            # "mac": "0a:05:b6:23:94:66",
+            # "suricata": [],                                               # Suricata Liste kann leer sein
+            # "ML": {
+            #     "type": "Normal",
+            #     "description": "No detection",
+            #     "first_occurrence": "TODO",                                 # Erstes packet, Beginn erstes window, Beginn erster flow... der PCAP
+            #     "num_occurrences": "0",                                     # 0 oder Anzahl überprüfter Pakete, Windows, Flows...?
+            #     "score": 0.3265736536783245,                                # Wenn keine detection dann Durchschnitt über alle Auswertungen?
+            # }
+            # },
+            # {
+            # "mac": "bc:93:81:fe:44:32",
+            # "suricata": [],
+            # "ML": {
+            #     "type": "Inactive",
+            #     "description": "No Packets",
+            #     "first_occurrence": "TODO",                                 # ? Eigentlich, egal vieleicht 1. Januar 1970 00:00:00
+            #     "num_occurrences": "0",                                     # 0
+            #     "score": 0.0,                                               # 0.0 wenn keine Pakete vorhanden
+            # }
+            # }
+            # ]
+            #
+            #
+            #
             # Merge to a final result as json
             try:
                 info = {"file": pcap_name, 

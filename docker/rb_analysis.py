@@ -88,33 +88,36 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, logger=default_logger):
                     pcap_file.write(rb_pcap_pipe.read())
                     temp_pcap = pcap_file.name
                     logger.debug(f"Created temp file {temp_pcap}")
-                logger.info("Analyzing pcap with Suricata")
+                logger.info("Analyzing pcap with Suricatasc")
                 cmd = f"suricatasc {RB_SOCKET}"
                 input = f"pcap-file {temp_pcap} /app\nquit\n"
-                logger.debug(f"Invoking Suricata with {cmd=} and with {input=} and quit after")
+                logger.debug(f"Invoking Suricatasc with {cmd=} and {input=}")
                 start_time = time.time()
-                suricata_process = subprocess.run(cmd, input=input, text=True, capture_output=True, shell=True)
-                if suricata_process.returncode != 0:
+                suricatasc_process = subprocess.run(cmd, input=input, text=True, capture_output=True, shell=True)
+                if suricatasc_process.returncode != 0:
                     # Something went wrong
-                    logger.warning(f"Suricata process had a non zero exit code: {suricata_process}") # TODO: Do we want to raise manually?
-                    raise Exception(suricata_process) 
+                    logger.warning(f"Suricatasc process had a non zero exit code: {suricatasc_process}") # TODO: Do we want to raise manually?
+                    raise Exception(suricatasc_process) 
                 else:
                     has_finished = False
                     while not has_finished:
                         cmd = f"suricatasc {RB_SOCKET}"
-                        input = f"pcap-file-number\nquit\n"
-                        logger.debug(f"Invoking waiting Suricata with {cmd=} and with {input=} and quit after")
+                        input = f"pcap-current\nquit\n"
+                        logger.debug(f"Waiting for Suricatasc with {cmd=} and {input=}")
                         waiting_process = subprocess.run(cmd, input=input, text=True, capture_output=True, shell=True)
                         if waiting_process.returncode != 0:
                             # Something went wrong
-                            logger.warning(f"Suricata waiting process had a non zero exit code: {suricata_process}") # TODO: Do we want to raise manually?
-                            raise Exception(suricata_process) 
+                            logger.warning(f"Suricatasc waiting process had a non zero exit code: {waiting_process}") # TODO: Do we want to raise manually?
+                            raise Exception(waiting_process) 
                         else:
-                            if "Success:\n0" in waiting_process.stdout:
+                            if not temp_pcap in waiting_process.stdout: # if the file doesn't appear, it is processed
                                 has_finished = True # Done processing the pcap file
                                 break
+                            else:
+                                logger.debug(f"Output of waiting process: {waiting_process.stdout}")
+                                continue
                     duration_s = time.time() - start_time
-                    logger.info(f"Suricata done: {suricata_process}, took {duration_s}s")
+                    logger.info(f"Suricatasc done: {suricatasc_process}, took {duration_s}s")
                     # Unlink tempfile (delete)
                     if temp_pcap:
                         os.unlink(temp_pcap)
