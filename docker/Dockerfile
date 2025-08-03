@@ -9,8 +9,10 @@ RUN apt update && apt install -y -t stable-backports iputils-ping python3 python
 RUN pip3 install --break-system-packages flask flask-restx gunicorn dpkt numpy tensorflow
 
 # Set up suricata properly
-# Also enable et/open dataset as default and add all relevant rulesets by abuse.ch
-RUN suricata-update && suricata-update enable-source abuse.ch/sslbl-blacklist && suricata-update enable-source abuse.ch/sslbl-c2 && suricata-update enable-source abuse.ch/sslbl-ja3 && suricata-update update-sources
+# Also enable et/open dataset as default and add all relevant rulesets by abuse.ch (currently only URLhaus is maintained)
+#RUN suricata-update && suricata-update enable-source abuse.ch/sslbl-blacklist && suricata-update enable-source abuse.ch/sslbl-c2 && suricata-update enable-source abuse.ch/sslbl-ja3 && suricata-update update-sources
+RUN suricata-update && suricata-update enable-source abuse.ch/urlhaus && suricata-update update-sources
+
 
 # Set up working directory
 WORKDIR /app

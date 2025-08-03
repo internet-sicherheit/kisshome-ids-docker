@@ -1,21 +1,22 @@
 
 #!/usr/bin/env python3
 
+import logging.handlers
 import sys
 import time
 import json
 import dpkt
 import traceback
-
 import numpy as np
-
 import logging
-
 import csv
 import struct
 import bisect
 import ipaddress
+import random
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from functools import lru_cache
 from collections import defaultdict, deque
 from multiprocessing import Pool, cpu_count
@@ -35,7 +36,8 @@ def init_logger():
     # Each log line includes the date and time, the log level, the current function and the message
     formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
     # The log file is the same as the module name plus the suffix ".log"
-    fh = logging.FileHandler("/app/ml_analysis.log")
+    # Rotate files each day to max 7 files, oldest will be deleted
+    fh = logging.handlers.TimedRotatingFileHandler(filename="/app/ml_analysis.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
     sh = logging.StreamHandler()
     fh.setLevel(logging.DEBUG)  # set the log level for the log file
     fh.setFormatter(formatter)
@@ -44,7 +46,7 @@ def init_logger():
     logger = logging.getLogger(__name__)
     logger.addHandler(fh)
     logger.addHandler(sh)
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
     logger.propagate = False
 
 KNOWN_DEVICES_JSON_FILE = "/app/meta.json"
@@ -438,7 +440,7 @@ def process_packets(pool, pcap):
                 # TODO: here we may do some outlier detection or other
                 continue
             
-            logger.info(f"{details=}")
+            logger.debug(f"{details=}")
 
             # Save necessary infos for user statistics
             if int(details["link_protocol"]) == 2048: # Only ipv4
@@ -519,34 +521,53 @@ def flush_results(result_pipe, results, device_statistics, analysis_duration_ms,
     """
     result_text = ""
     formatted_devices = []
-    
+
+    # TODO: TEST!!!
+
     detections = []
 
+    index = 0
     for score in results:
         #result_text += f"{score}\n"
-        # TODO: TEST!!!
-        if score > 0.8:
-            alert = {
-                "source": "ML",
-                "mac": "TODO", # TODO: Only scores available here
-                "type": "Alert", 
-                "description": "Anomaly detected", 
-                "first_occurrence": "TODO", # TODO: Only scores available here
-                "number_occurrences": 1, # Start with 1
-                "score": score
-            }
-            detections.append(alert)
-        elif score > 0.5:
+        # if score > 0.8:
+        #     alert = {
+        #         "type": "Alert", 
+        #         "description": "Anomaly detected", 
+        #         "first_occurrence": "TODO", # TODO: Only scores available here
+        #         "number_occurrences": 1, # Start with 1
+        #         "score": score
+        #     }
+        #     detections.append({"mac": "TODO", "ml": [alert]})
+        #
+        # ^: No alerts for ml
+        #
+        mac_keys = list(device_statistics.keys())
+        if index < len(mac_keys):
+            mac_bytes = mac_keys[index]
+            mac = ":".join(f"{b:02x}" for b in mac_bytes)
+            stats = device_statistics[mac_bytes]
+        else:
+            continue # Just testing
+
+        test_occurrence = random.randint(1, 100) # TODO: Showcase
+
+        if score > 0.5:
             warning = {
-                "source": "ML",
-                "mac": "TODO", # TODO: Only scores available here
                 "type": "Warning", 
-                "description": "Unusual behaviour", 
-                "first_occurrence": "TODO", # TODO: Only scores available here
-                "number_occurrences": 1, # Start with 1
-                "score": score
+                "description": f"{test_occurrence} Anomalies detected",
+                "first_occurrence": str(datetime.now(ZoneInfo("Europe/Berlin")).strftime("%d.%m.%Y %H:%M:%S %Z%z")),
+                "number_occurrences": test_occurrence # Random
             }
-            detections.append(warning)
+            detections.append({"mac": mac, "ml": warning})
+        elif score < 0.5:
+            normal = {
+                "type": "Normal", 
+                "description": f"{test_occurrence} Anomalies detected", 
+                "first_occurrence": str(datetime.now(ZoneInfo("Europe/Berlin")).strftime("%d.%m.%Y %H:%M:%S %Z%z")),
+                "number_occurrences": test_occurrence # Random
+            }
+            detections.append({"mac": mac, "ml": normal})
+        index += 1
         #logger.debug(f"{score}\n")
 
     for mac, stats in device_statistics.items():

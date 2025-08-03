@@ -5,6 +5,7 @@
 Script to analyze the .pcap files with suricata
 """
 
+import logging.handlers
 import os
 import logging
 import json
@@ -17,7 +18,8 @@ from states import set_state, EXITED
 # Each log line includes the date and time, the log level, the current function and the message
 formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
 # The log file is the same as the module name plus the suffix ".log"
-fh = logging.FileHandler("/app/rb_analysis.log")
+# Rotate files each day to max 7 files, oldest will be deleted
+fh = logging.handlers.TimedRotatingFileHandler(filename="/app/rb_analysis.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
 sh = logging.StreamHandler()
 fh.setLevel(logging.DEBUG)  # set the log level for the log file
 fh.setFormatter(formatter)
@@ -26,7 +28,7 @@ sh.setLevel(logging.INFO)  # set the log level for the console
 default_logger = logging.getLogger(__name__)
 default_logger.addHandler(fh)
 default_logger.addHandler(sh)
-default_logger.setLevel(logging.DEBUG)
+default_logger.setLevel(logging.INFO)
 default_logger.propagate = False
 
 
@@ -42,26 +44,30 @@ def rb_start_deamon(logger=default_logger):
     @return: nothing
     """
     try:
-        cmd = f"suricata -c /app/suricata.yaml --unix-socket -D"
-        logger.debug(f"Invoking Suricata deamon with {cmd=}")
-        suricatad_process = subprocess.run(cmd, capture_output=True, shell=True)
-        if suricatad_process.returncode != 0:
-            # Something went wrong
-            logger.warning(f"Suricata deamon process had a non zero exit code: {suricatad_process}")
-            raise Exception(suricatad_process) 
+        # Only start when there is no suricata process running by checking for a .pid file
+        if not os.path.exists("/var/run/suricata.pid"):
+            cmd = f"suricata -c /app/suricata.yaml --unix-socket -D"
+            logger.debug(f"Invoking Suricata deamon with {cmd=}")
+            suricatad_process = subprocess.run(cmd, capture_output=True, shell=True)
+            if suricatad_process.returncode != 0:
+                # Something went wrong
+                logger.warning(f"Suricata deamon process had a non zero exit code: {suricatad_process}")
+                raise Exception(suricatad_process) 
+            else:
+                is_ready = False
+                while not is_ready:
+                    with open(os.path.join("/app", "suricata.log"), "r") as log_file:
+                        for log_line in log_file.readlines():
+                            global RB_SOCKET
+                            if "unix socket" in log_line and not RB_SOCKET:
+                                RB_SOCKET = str(log_line).split("'")[1] # Parse socket name from line
+                                logger.debug(f"Socket created at: {RB_SOCKET}")
+                            if "Engine started" in log_line:
+                                is_ready = True # Deamon has created socket and started engine
+                                break
+                logger.info(f"Suricata deamon started: {suricatad_process}")
         else:
-            is_ready = False
-            while not is_ready:
-                with open(os.path.join("/app", "suricata.log"), "r") as log_file:
-                    for log_line in log_file.readlines():
-                        global RB_SOCKET
-                        if "unix socket" in log_line and not RB_SOCKET:
-                            RB_SOCKET = str(log_line).split("'")[1] # Parse socket name from line
-                            logger.debug(f"Socket created at: {RB_SOCKET}")
-                        if "Engine started" in log_line:
-                            is_ready = True # Deamon has created socket and started engine
-                            break
-            logger.info(f"Suricata deamon started: {suricatad_process}")
+            logger.warning("Suricata already running")
     except Exception as e:
         set_state(EXITED)
         logger.exception(f"Could not start Suricata deamon: {e}")
@@ -89,11 +95,10 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, logger=default_logger):
                     temp_pcap = pcap_file.name
                     logger.debug(f"Created temp file {temp_pcap}")
                 logger.info("Analyzing pcap with Suricatasc")
-                cmd = f"suricatasc {RB_SOCKET}"
-                input = f"pcap-file {temp_pcap} /app\nquit\n"
-                logger.debug(f"Invoking Suricatasc with {cmd=} and {input=}")
+                cmd = f"suricatasc {RB_SOCKET} -c 'pcap-file {temp_pcap} /app'"
+                logger.debug(f"Invoking Suricatasc with {cmd=}")
                 start_time = time.time()
-                suricatasc_process = subprocess.run(cmd, input=input, text=True, capture_output=True, shell=True)
+                suricatasc_process = subprocess.run(cmd, capture_output=True, shell=True)
                 if suricatasc_process.returncode != 0:
                     # Something went wrong
                     logger.warning(f"Suricatasc process had a non zero exit code: {suricatasc_process}") # TODO: Do we want to raise manually?
@@ -101,16 +106,15 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, logger=default_logger):
                 else:
                     has_finished = False
                     while not has_finished:
-                        cmd = f"suricatasc {RB_SOCKET}"
-                        input = f"pcap-current\nquit\n"
-                        logger.debug(f"Waiting for Suricatasc with {cmd=} and {input=}")
-                        waiting_process = subprocess.run(cmd, input=input, text=True, capture_output=True, shell=True)
+                        cmd = f"suricatasc {RB_SOCKET} -c pcap-current"
+                        logger.debug(f"Waiting for Suricatasc with {cmd=}")
+                        waiting_process = subprocess.run(cmd, capture_output=True, shell=True)
                         if waiting_process.returncode != 0:
                             # Something went wrong
                             logger.warning(f"Suricatasc waiting process had a non zero exit code: {waiting_process}") # TODO: Do we want to raise manually?
                             raise Exception(waiting_process) 
                         else:
-                            if not temp_pcap in waiting_process.stdout: # if the file doesn't appear, it is processed
+                            if not temp_pcap in str(waiting_process.stdout): # if the file doesn't appear, it is processed
                                 has_finished = True # Done processing the pcap file
                                 break
                             else:
@@ -145,8 +149,10 @@ def rb_write_results(rb_result_pipe_path, duration, logger=default_logger):
             with open(rb_result_pipe_path, "w") as result_pipe:
                 result_pipe.write(json.dumps(filtered_results))
         # Flush afterward
-        with open(os.path.join("/app", "eve.json"), "w") as result_file:
-            result_file.write("")
+        with open(os.path.join("/app", "eve.json"), "w") as eve_file:
+            eve_file.write("")
+        with open(os.path.join("/app", "suricata.log"), "w") as log_file:
+            log_file.write("")
     except Exception as e:
         set_state(EXITED)
         logger.exception(f"Could not write the results: {e}")
@@ -160,10 +166,12 @@ def rb_filter_results(eve_json, duration, logger=default_logger):
     @param eve_json: json string with the content of the eve.json file
     @param duration: the time the suricata engine needed for the analysis in seconds
     @param logger: logger for logging, default default_logger
-    @return: all valid alerts as a json string
+    @return: all valid alerts as a dictionary
     """
     logger.info("Start filtering alerts from results")
-    alert_dictionary = {"detections": [], "statistics": {"suricataTotalRules": rb_count_rules(), "suricataAalysisDurationMs": duration * 1000}}
+    # Structure:
+    # "detections": [{"mac": "", "suricata": [], "ml": {}}]   
+    alert_dictionary = {"detections": [], "statistics": {"suricataTotalRules": rb_count_rules(), "suricataAnalysisDurationMs": duration * 1000}}
     try:
         for line in eve_json:
             entry = json.loads(line)
@@ -171,28 +179,38 @@ def rb_filter_results(eve_json, duration, logger=default_logger):
                 logger.debug(f"{entry=}")
                 # Sometimes ether is not set, skip
                 if "ether" in entry:
-                    new_alert = {
-                        "source": "Suricata",
-                        "mac": rb_check_mac(entry["ether"]),
+                    suricata_alert = {
                         "type": "Alert", 
                         "description": entry["alert"]["signature"], 
                         "first_occurrence": entry["timestamp"],
-                        "number_occurrences": 1 # Start with 1
+                        "number_occurrences": 1, # Start with 1
                         }
-                    # Before appending, check if the new alert is already present to update occurences
+                    new_alert = {
+                        "mac": rb_check_mac(entry["ether"]),
+                        "suricata": [suricata_alert] 
+                        }
+                    # Before appending, check if the new alert is already present
                     has_alert = False
                     for alert in alert_dictionary["detections"]:
-                        if alert["mac"] == new_alert["mac"] and alert["description"] == new_alert["description"]:
-                            alert["number_occurrences"] += 1
-                            has_alert = True
-                            break
-                    # Only add new alerts
+                        if alert["mac"] == new_alert["mac"]:
+                            # Only update occurence
+                            for entry in alert["suricata"]:
+                                # There is only one entry in new alert, index 0
+                                if entry["description"] == new_alert["suricata"][0]["description"]:
+                                    entry["number_occurrences"] += 1
+                                # Add to list for known mac
+                                else:
+                                    alert["suricata"].append(new_alert["suricata"][0])
+                                has_alert = True
+                                break
+                    # Only add completely new alerts
                     if not has_alert:
                         alert_dictionary["detections"].append(new_alert)
     except Exception as e:
         set_state(EXITED)
         logger.exception(f"Could not filter the results: {e}")
     logger.info("Finished filtering alerts from results")
+    logger.debug(f"Returning alerts: {alert_dictionary}")
     return alert_dictionary
 
 
@@ -203,14 +221,14 @@ def rb_check_mac(mac_adresses, logger=default_logger):
     @param mac_adresses: all possible macs extracted from /app/eve.json
     @return: a valid mac address as a string
     """
-    logger.info(f"Start checking mac")
+    logger.debug(f"Start checking mac")
     try: 
         with open(os.path.join("/app", "meta.json"), "r") as meta_file:
             meta_json = json.load(meta_file)
             # TODO: Add examples
             for meta_key in meta_json.keys():
                 if meta_key.lower() in mac_adresses.values():
-                    logger.info("Finished checking mac")
+                    logger.debug("Finished checking mac")
                     return meta_key.lower()
     except Exception as e:
         set_state(EXITED)
@@ -227,9 +245,10 @@ def rb_prepare_rules(logger=default_logger):
     try:
         # Not case sensitive pattern to filter important rules
         # Exclude 'microsoft' since it can be mentioned as a source or menioned in a user agent'
+        # 'sslbl' by abuse.ch deprecated, remove from whitelist
         cmd = (f"grep -viE 'et info|affected_product windows' " # Blacklist with -v
                f"/var/lib/suricata/rules/suricata.rules | "
-               f"grep -iE 'kisshome|sslbl|et malware|confidence high|signature_severity major' " # Whitelist
+               f"grep -iE 'kisshome|urlhaus|et malware|confidence high|signature_severity major' " # Whitelist
                f"> /var/lib/suricata/rules/filtered.rules && "
                f"mv /var/lib/suricata/rules/filtered.rules /var/lib/suricata/rules/suricata.rules")
         logger.debug(f"Preparing rules with {cmd=}")

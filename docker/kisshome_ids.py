@@ -18,7 +18,8 @@ from states import set_state, STARTED, EXITED
 # Each log line includes the date and time, the log level, the current function and the message
 formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
 # The log file is the same as the module name plus the suffix ".log"
-fh = logging.FileHandler("/app/kisshome_ids.log")
+# Rotate files each day to max 7 files, oldest will be deleted
+fh = logging.handlers.TimedRotatingFileHandler(filename="/app/kisshome_ids.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
 sh = logging.StreamHandler()
 fh.setLevel(logging.DEBUG)  # set the log level for the log file
 fh.setFormatter(formatter)
@@ -27,7 +28,7 @@ sh.setLevel(logging.INFO)  # set the log level for the console
 default_logger = logging.getLogger(__name__)
 default_logger.addHandler(fh)
 default_logger.addHandler(sh)
-default_logger.setLevel(logging.DEBUG)
+default_logger.setLevel(logging.INFO)
 default_logger.propagate = False
 
 

@@ -6,7 +6,11 @@ Script to aggregate the data and send it back to the adapter
 """
 
 import logging
+import logging.handlers
 import requests
+import os
+import json
+import random
 
 from states import get_state, set_state, ANALYZING, RUNNING, EXITED
 from datetime import datetime
@@ -16,7 +20,8 @@ from ast import literal_eval
 # Each log line includes the date and time, the log level, the current function and the message
 formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
 # The log file is the same as the module name plus the suffix ".log"
-fh = logging.FileHandler("/app/aggregator.log")
+# Rotate files each day to max 7 files, oldest will be deleted
+fh = logging.handlers.TimedRotatingFileHandler(filename="/app/aggregator.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
 sh = logging.StreamHandler()
 fh.setLevel(logging.DEBUG)  # set the log level for the log file
 fh.setFormatter(formatter)
@@ -25,8 +30,15 @@ sh.setLevel(logging.INFO)  # set the log level for the console
 default_logger = logging.getLogger(__name__)
 default_logger.addHandler(fh)
 default_logger.addHandler(sh)
-default_logger.setLevel(logging.DEBUG)
+default_logger.setLevel(logging.INFO)
 default_logger.propagate = False
+
+
+# Anomaly strings
+ANOMALY = "Anomalies detected"
+NO_ANOMALY = "No anomalies detected"
+
+
 
 def send_results(results, callback_url, logger=default_logger):
     """
@@ -51,9 +63,9 @@ def send_results(results, callback_url, logger=default_logger):
     logger.debug(f"Send {results=} to {callback_url=}")
 
 
-def parse_pipes(rb_pipe_dict, ml_pipe_dict, logger=default_logger):
+def aggregate_pipes(rb_pipe_dict, ml_pipe_dict, logger=default_logger):
     """
-    Parse the pipe data and create a new json object
+    Aggregate the pipe data and create a new json object
     
     @param rb_pipe_json: pipe with the rb result content as a dict
     @param ml_pipe_json: pipe with the ml result content as a dict
@@ -63,7 +75,50 @@ def parse_pipes(rb_pipe_dict, ml_pipe_dict, logger=default_logger):
     # Parse incoming data from pipes to a new dict to collect all gathered informations
     analysis_results = {"statistics": {}, "detections": []}
 
-    analysis_results["detections"] = rb_pipe_dict["detections"] + ml_pipe_dict["detections"]
+    # Aggregate the detections first
+    # Get known macs from meta.json
+    known_macs = []
+    with open(os.path.join("/app", "meta.json"), "r") as meta_file:
+        known_macs = json.load(meta_file).keys()
+
+    for mac in known_macs:
+        analysis_results["detections"].append({"mac": mac})
+
+    # Get keys of 
+    rb_macs = [str(rb_mac["mac"]).lower() for rb_mac in rb_pipe_dict["detections"]]
+    ml_macs = [str(ml_mac["mac"]).lower() for ml_mac in ml_pipe_dict["detections"]]
+
+    for detection in analysis_results["detections"]:
+        current_mac = str(detection["mac"]).lower()
+        # Suricata first
+        if current_mac in rb_macs:
+            detection["suricata"] = rb_pipe_dict["detections"][rb_macs.index(current_mac)]["suricata"]
+            # Add score of 100 to each alert (TUHH)
+            for alert in detection["suricata"]:
+                alert["score"] = 100
+        else:
+            # Mac is missing, create entry for it
+            detection["suricata"] = []
+
+        # ML second
+        if current_mac in ml_macs:
+            detection["ml"] = ml_pipe_dict["detections"][ml_macs.index(current_mac)]["ml"]
+            # Add random score (TUHH)
+            if "Warning" in detection["ml"]["type"]:
+                detection["ml"]["score"] = round(random.uniform(90, 100), 2)
+            if "Normal" in detection["ml"]["type"]:
+                detection["ml"]["score"] = round(random.uniform(0, 10), 2)
+        else:
+            new_ml_detection = {
+                "type": "Normal", 
+                "description": "0 Anomalies detected",
+                "first_occurrence": str(datetime.now(ZoneInfo("Europe/Berlin")).strftime("%d.%m.%Y %H:%M:%S %Z%z")),
+                "number_occurrences": 0,
+                "score": round(random.uniform(0, 10), 2)
+                } 
+            detection["ml"] = new_ml_detection
+
+    # Then aggregate the statistics
     analysis_results["statistics"] = {**rb_pipe_dict["statistics"], **ml_pipe_dict["statistics"]}
 
     logger.debug(f"Finished parsing pipes to dict: {analysis_results}")
@@ -140,6 +195,14 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=de
             #     "description": "ET MALWARE DDoS.XOR Checkin via HTTP",
             #     "first_occurrence": "2024-03-06T02:45:44.595361+0000",
             #     "num_occurrences": "2"
+            #     "score": "100"
+            #     },
+            #     {
+            #     "type": "Alert",
+            #     "description": "ET MALWARE DDoS.XOR Checkin",
+            #     "first_occurrence": "2024-03-06T02:45:54.595361+0000",
+            #     "num_occurrences": "1"
+            #     "score": "100"
             #     }
             # ],
             # "ML": {                                                       # Dict mit ML Result
@@ -147,7 +210,7 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=de
             #     "description": "Anomaly detected",
             #     "first_occurrence": "TODO",                                 # Erstes packet, Beginn erstes window, Beginn erster flow... mit detection
             #     "num_occurrences": "100",                                   # Anzahl results über threshold
-            #     "score": 0.8152504444122314,                                # Wenn  detection dann Durchschintt der Scores die über treshold lagen?
+            #     "score": 81.52,                                # Wenn  detection dann Durchschintt der Scores die über treshold lagen?
             # }
             # },
             # {
@@ -155,10 +218,10 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=de
             # "suricata": [],                                               # Suricata Liste kann leer sein
             # "ML": {
             #     "type": "Normal",
-            #     "description": "No detection",
-            #     "first_occurrence": "TODO",                                 # Erstes packet, Beginn erstes window, Beginn erster flow... der PCAP
+            #     "description": "No Anomalies detected", or None
+            #     "first_occurrence": None,                                 # Erstes packet, Beginn erstes window, Beginn erster flow... der PCAP
             #     "num_occurrences": "0",                                     # 0 oder Anzahl überprüfter Pakete, Windows, Flows...?
-            #     "score": 0.3265736536783245,                                # Wenn keine detection dann Durchschnitt über alle Auswertungen?
+            #     "score": 5.10,                                # Wenn keine detection dann Durchschnitt über alle Auswertungen?
             # }
             # },
             # {
@@ -176,13 +239,33 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=de
             #
             #
             #
+            # FROM ML:
+            # [
+            #   {<MAC1>: {
+            #     "type": "Warning",   # Normal, Alert
+            #     "description": "47 Anomalies detected",
+            #     "first_occurrence": "some data",
+            #     "num_occurrences": 47,
+            #     }
+            #   },
+            #   {<MAC4>: {
+            #     "type": "Warning",   # Normal, Alert
+            #     "description": "29 Anomalies detected",
+            #     "first_occurrence": "some date",
+            #     "num_occurrences": 29,
+            #     }
+            #   }
+            # ]
+            #
+            #
+            #
             # Merge to a final result as json
             try:
                 info = {"file": pcap_name, 
                         "time": datetime.now(ZoneInfo("Europe/Berlin")).strftime("%d.%m.%Y %H:%M:%S %Z%z"), 
                         "result": {"status": "success"}
                         }
-                data = parse_pipes(dict(literal_eval(rb_pipe.read().strip())), dict(literal_eval(ml_pipe.read().strip())))
+                data = aggregate_pipes(dict(literal_eval(rb_pipe.read().strip())), dict(literal_eval(ml_pipe.read().strip())))
                 results = {**info, **data}
                 send_results(results, callback_url)
             except Exception as e:

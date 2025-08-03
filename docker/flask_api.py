@@ -5,6 +5,7 @@
 Script to start the API 
 """
 
+import logging.handlers
 import os
 import logging
 import json
@@ -20,7 +21,8 @@ from states import *
 # Each log line includes the date and time, the log level, the current function and the message
 formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
 # The log file is the same as the module name plus the suffix ".log"
-fh = logging.FileHandler("/app/flask_api.log")
+# Rotate files each day to max 7 files, oldest will be deleted
+fh = logging.handlers.TimedRotatingFileHandler(filename="/app/flask_api.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
 sh = logging.StreamHandler()
 fh.setLevel(logging.DEBUG)  # set the log level for the log file
 fh.setFormatter(formatter)
@@ -29,12 +31,12 @@ sh.setLevel(logging.INFO)  # set the log level for the console
 logger = logging.getLogger(__name__)
 logger.addHandler(fh)
 logger.addHandler(sh)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 logger.propagate = False
 
 
 # Version
-VERSION = "1.1.2"
+VERSION = "1.1.3"
 
 # Initialize Lock for fifo pipes
 pipe_lock = Lock()
@@ -168,7 +170,7 @@ class Configuration(Resource):
 
 @ns.route("/pcap")
 @api.doc(responses={200: f"Pcap received, start {ENV_NAME}", 
-                    409: f"Not configured",  
+                    409: f"{ENV_NAME} not configured",  
                     429: f"{ENV_NAME} busy", 
                     500: f"Internal Server Error",
                     503: f"{ENV_NAME} unavailable"},
@@ -182,7 +184,7 @@ class Pcap(Resource):
             return {"Result": "Failed", "Message": f"{ENV_NAME} has exited, state: {get_state()}"}, 503
         if STARTED in get_state():
             # IDS is not configured yet, return 409 conflict
-            return {"Result": "Failed", "Message": f"Not configured, state: {get_state()}"}, 409
+            return {"Result": "Failed", "Message": f"{ENV_NAME} not configured, state: {get_state()}"}, 409
         if ANALYZING in get_state() or CONFIGURING in get_state():
             # IDS is analysing or configuring, return 429 too many request
             return {"Result": "Failed", "Message": f"{ENV_NAME} busy, state: {get_state()}"}, 429
