@@ -3,16 +3,15 @@
 FROM debian:stable-backports
 
 # Install apt dependencies
-RUN apt update && apt install -y -t stable-backports iputils-ping python3 python3-pip suricata && apt clean
+RUN apt update && apt install -y -t stable-backports python3 python3-pip suricata && apt clean
 
 # Install python dependencies
-RUN pip3 install --break-system-packages flask flask-restx gunicorn dpkt numpy tensorflow
+RUN pip3 install --break-system-packages flask flask-restx gunicorn schedule dpkt numpy tensorflow
 
 # Set up suricata properly
 # Also enable et/open dataset as default and add all relevant rulesets by abuse.ch (currently only URLhaus is maintained)
 #RUN suricata-update && suricata-update enable-source abuse.ch/sslbl-blacklist && suricata-update enable-source abuse.ch/sslbl-c2 && suricata-update enable-source abuse.ch/sslbl-ja3 && suricata-update update-sources
 RUN suricata-update && suricata-update enable-source abuse.ch/urlhaus && suricata-update update-sources
-
 
 # Set up working directory
 WORKDIR /app

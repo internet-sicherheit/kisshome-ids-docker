@@ -12,6 +12,7 @@ import json
 import subprocess
 import time
 import tempfile
+import schedule
 
 from states import set_state, EXITED
 
@@ -44,30 +45,34 @@ def rb_start_deamon(logger=default_logger):
     @return: nothing
     """
     try:
-        # Only start when there is no suricata process running by checking for a .pid file
-        if not os.path.exists("/var/run/suricata.pid"):
-            cmd = f"suricata -c /app/suricata.yaml --unix-socket -D"
-            logger.debug(f"Invoking Suricata deamon with {cmd=}")
-            suricatad_process = subprocess.run(cmd, capture_output=True, shell=True)
-            if suricatad_process.returncode != 0:
-                # Something went wrong
-                logger.warning(f"Suricata deamon process had a non zero exit code: {suricatad_process}")
-                raise Exception(suricatad_process) 
+        # Prepare rules for the initial startup
+        if rb_prepare_rules():
+            # Only start when there is no suricata process running by checking for a .pid file
+            if not os.path.exists("/var/run/suricata.pid"):
+                cmd = f"suricata -c /app/suricata.yaml --unix-socket -D"
+                logger.debug(f"Invoking Suricata deamon with {cmd=}")
+                suricatad_process = subprocess.run(cmd, capture_output=True, shell=True)
+                if suricatad_process.returncode != 0:
+                    # Something went wrong
+                    logger.warning(f"Suricata deamon process had a non zero exit code: {suricatad_process}")
+                    raise Exception(suricatad_process) 
+                else:
+                    is_ready = False
+                    while not is_ready:
+                        with open(os.path.join("/app", "suricata.log"), "r") as log_file:
+                            for log_line in log_file.readlines():
+                                global RB_SOCKET
+                                if "unix socket" in log_line and not RB_SOCKET:
+                                    RB_SOCKET = str(log_line).split("'")[1] # Parse socket name from line
+                                    logger.debug(f"Socket created at: {RB_SOCKET}")
+                                if "Engine started" in log_line:
+                                    is_ready = True # Deamon has created socket and started engine
+                                    break
+                    logger.info(f"Suricata deamon started: {suricatad_process}")
             else:
-                is_ready = False
-                while not is_ready:
-                    with open(os.path.join("/app", "suricata.log"), "r") as log_file:
-                        for log_line in log_file.readlines():
-                            global RB_SOCKET
-                            if "unix socket" in log_line and not RB_SOCKET:
-                                RB_SOCKET = str(log_line).split("'")[1] # Parse socket name from line
-                                logger.debug(f"Socket created at: {RB_SOCKET}")
-                            if "Engine started" in log_line:
-                                is_ready = True # Deamon has created socket and started engine
-                                break
-                logger.info(f"Suricata deamon started: {suricatad_process}")
+                logger.warning("Suricata already running")
         else:
-            logger.warning("Suricata already running")
+            logger.warning("Suricata rule preparation failed")
     except Exception as e:
         set_state(EXITED)
         logger.exception(f"Could not start Suricata deamon: {e}")
@@ -84,10 +89,15 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, logger=default_logger):
     logger.info(f"Start using suricata to analyze pcap data")
     # Use suricata on the provided pcap content
     try:
+        # Set the rule update process first so that rules are updated daily using schedule modul
+        schedule.every(1).day.do(rb_update_rules)
         while True:
+            # Check if the scheduled job needs to be executed
+            schedule.run_pending()
             # Blocks until the writer has finished its job
             with open(rb_pcap_pipe_path, "rb") as rb_pcap_pipe:
-                # Write the data to a tempfile
+                start_time = time.time()
+                # Write the data to a tempfile since suricatasc cannot process streams
                 temp_pcap = None
                 # Delete manually
                 with tempfile.NamedTemporaryFile(delete=False) as pcap_file:
@@ -97,11 +107,14 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, logger=default_logger):
                 logger.info("Analyzing pcap with Suricatasc")
                 cmd = f"suricatasc {RB_SOCKET} -c 'pcap-file {temp_pcap} /app'"
                 logger.debug(f"Invoking Suricatasc with {cmd=}")
-                start_time = time.time()
                 suricatasc_process = subprocess.run(cmd, capture_output=True, shell=True)
                 if suricatasc_process.returncode != 0:
                     # Something went wrong
                     logger.warning(f"Suricatasc process had a non zero exit code: {suricatasc_process}") # TODO: Do we want to raise manually?
+                    # Unlink tempfile (delete)
+                    if temp_pcap:
+                        os.unlink(temp_pcap)
+                        logger.debug(f"Deleted temp file {temp_pcap}")
                     raise Exception(suricatasc_process) 
                 else:
                     has_finished = False
@@ -112,6 +125,10 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, logger=default_logger):
                         if waiting_process.returncode != 0:
                             # Something went wrong
                             logger.warning(f"Suricatasc waiting process had a non zero exit code: {waiting_process}") # TODO: Do we want to raise manually?
+                            # Unlink tempfile (delete)
+                            if temp_pcap:
+                                os.unlink(temp_pcap)
+                                logger.debug(f"Deleted temp file {temp_pcap}")
                             raise Exception(waiting_process) 
                         else:
                             if not temp_pcap in str(waiting_process.stdout): # if the file doesn't appear, it is processed
@@ -120,12 +137,12 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, logger=default_logger):
                             else:
                                 logger.debug(f"Output of waiting process: {waiting_process.stdout}")
                                 continue
-                    duration_s = time.time() - start_time
-                    logger.info(f"Suricatasc done: {suricatasc_process}, took {duration_s}s")
                     # Unlink tempfile (delete)
                     if temp_pcap:
                         os.unlink(temp_pcap)
                         logger.debug(f"Deleted temp file {temp_pcap}")
+                    duration_s = time.time() - start_time
+                    logger.info(f"Suricatasc done: {suricatasc_process}, took {duration_s}s")
                     # Write results
                     rb_write_results(rb_result_pipe_path, duration_s)
     except Exception as e:
@@ -240,13 +257,13 @@ def rb_prepare_rules(logger=default_logger):
     Prepare the rules for suricata by disabling some rules, e.g. for windows environment
 
     @param logger: logger for logging, default default_logger
-    @return: nothing
+    @return: bool if preparing was successful
     """
     try:
         # Not case sensitive pattern to filter important rules
-        # Exclude 'microsoft' since it can be mentioned as a source or menioned in a user agent'
+        # Exclude 'microsoft' from blacklist since it can be mentioned as a source or menioned in a user agent'
         # 'sslbl' by abuse.ch deprecated, remove from whitelist
-        cmd = (f"grep -viE 'et info|affected_product windows' " # Blacklist with -v
+        cmd = (f"grep -viE 'et info|affected_product windows|alert pkthdr|alert icmp' " # Blacklist with -v
                f"/var/lib/suricata/rules/suricata.rules | "
                f"grep -iE 'kisshome|urlhaus|et malware|confidence high|signature_severity major' " # Whitelist
                f"> /var/lib/suricata/rules/filtered.rules && "
@@ -256,8 +273,10 @@ def rb_prepare_rules(logger=default_logger):
         if preparing_process.returncode != 0:
             # Something went wrong
             logger.warning(f"Preparing rules had a non zero exit code: {preparing_process}")
+            return False
         else:
             logger.info(f"Preparing rules done: {preparing_process}")
+            return True
     except Exception as e:
         set_state(EXITED)
         logger.exception(f"Could not prepare rules: {e}")
@@ -284,6 +303,42 @@ def rb_count_rules(logger=default_logger):
     except Exception as e:
         set_state(EXITED)
         logger.exception(f"Could not count rules: {e}")
+
+
+def rb_update_rules(logger=default_logger):
+    """
+    Runs suricata-update to update the entire ruleset and triggers the reload of rules for the deamon 
+
+    @param logger: logger for logging, default default_logger
+    @return: count as an integer
+    """
+    try:
+        # First fetch new rules
+        cmd = "suricata-update"
+        logger.debug(f"Invoking Suricata rule update with {cmd=}")
+        update_process = subprocess.run(cmd, capture_output=True, shell=True)
+        if update_process.returncode != 0:
+            # Something went wrong
+            logger.warning(f"Suricata update process had a non zero exit code: {update_process}")
+            raise Exception(update_process) 
+        else:
+            # Then prepare newly fetched rules for the deamon if preparation was successful
+            if rb_prepare_rules():
+                # Lastly, reload rules for the deamon process
+                cmd = f"suricatasc {RB_SOCKET} -c reload-rules"
+                logger.debug(f"Invoking Suricatasc rule reload with {cmd=}")
+                suricatasc_process = subprocess.run(cmd, capture_output=True, shell=True)
+                if suricatasc_process.returncode != 0:
+                    # Something went wrong
+                    logger.warning(f"Suricatasc rule reload process had a non zero exit code: {suricatasc_process}")
+                    raise Exception(suricatasc_process) 
+                else:
+                    logger.info(f"Suricata rules updated: {update_process} and {suricatasc_process}")
+            else:
+                logger.warning("Suricata rule preparation failed")
+    except Exception as e:
+        set_state(EXITED)
+        logger.exception(f"Could not update Suricata rules: {e}")
 
 
 #if __name__ == '__main__':

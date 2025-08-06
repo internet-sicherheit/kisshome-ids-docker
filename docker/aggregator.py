@@ -39,7 +39,6 @@ ANOMALY = "Anomalies detected"
 NO_ANOMALY = "No anomalies detected"
 
 
-
 def send_results(results, callback_url, logger=default_logger):
     """
     Send results to a given URL
@@ -124,6 +123,7 @@ def aggregate_pipes(rb_pipe_dict, ml_pipe_dict, logger=default_logger):
     logger.debug(f"Finished parsing pipes to dict: {analysis_results}")
     
     return analysis_results
+
 
 def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=default_logger):
     """

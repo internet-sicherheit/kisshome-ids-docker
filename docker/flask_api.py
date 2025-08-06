@@ -36,7 +36,7 @@ logger.propagate = False
 
 
 # Version
-VERSION = "1.1.3"
+VERSION = "1.1.4"
 
 # Initialize Lock for fifo pipes
 pipe_lock = Lock()
@@ -59,8 +59,7 @@ status_message_model = ns.model("Status message",
     {
         "Version": fields.String(required=True, description="The version of the IDS"),
         "Status": fields.String(required=True, description="The status of the IDS"),
-        "Configuration": fields.Nested(status_configuration_model, required=True, description="The current configuration of the IDS"),
-        "Has Federated Learning server connection": fields.Boolean(required=True, description="The connection status of the Federated Learning Server")
+        "Configuration": fields.Nested(status_configuration_model, required=True, description="The current configuration of the IDS")
     }
 )
 status_model = ns.model("Status",
@@ -73,7 +72,7 @@ status_model = ns.model("Status",
 config_parser = reqparse.RequestParser()
 config_parser.add_argument('meta_json', location='files', type=FileStorage, required=True, help='The list with device MACs for filtering')
 config_parser.add_argument('callback_url', location='form', type=str, required=True, help='The URL to send the results of the IDS')
-config_parser.add_argument('allow_training', location='form', type=inputs.boolean, required=True, help='Is training with the Federated Learning Server allowed') # Do not use type=bool
+config_parser.add_argument('allow_training', location='form', type=inputs.boolean, required=True, help='Is training allowed') # Do not use type=bool
 
 pcap_parser = reqparse.RequestParser()
 pcap_parser.add_argument('pcap_name', location='args', type=str, required=True, help='The name of the pcap file')
@@ -110,8 +109,7 @@ class Status(Resource):
             # Return json
             message = {"Version": VERSION,
                        "Status": get_state(),
-                       "Configuration": {"Callback url": ids.callback_url, "Allow training": ids.allow_training, "Meta json": meta_json}, 
-                       "Has Federated Learning server connection": ids.has_fl_connection()}
+                       "Configuration": {"Callback url": ids.callback_url, "Allow training": ids.allow_training, "Meta json": meta_json}}
             logger.debug(f"Current status: {message}")
             return {"Result": "Success", "Message": message}, 200
         except Exception as e:
@@ -126,7 +124,7 @@ class Status(Resource):
                     503: f"{ENV_NAME} unavailable"}, 
          params={"meta_json": {"description": "The list with device MACs for filtering", "type": "json"},
                  "callback_url": {"description": "The URL to send the results of the IDS", "type": "string"},
-                 "allow_training": {"description": "Is training with the Federated Learning Server allowed", "type": "boolean"}})
+                 "allow_training": {"description": "Is training allowed", "type": "boolean"}})
 class Configuration(Resource):
     @ns.expect(config_parser)
     def post(self):

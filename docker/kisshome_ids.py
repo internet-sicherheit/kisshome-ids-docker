@@ -39,15 +39,13 @@ class KisshomeIDS:
         Init
 
         @param logger: logger for logging, default default_logger
-        @param fl_url: URL to the Federated Learning Server
         @return: nothing
         """
         # Use init param first
         self.logger = logger
         
         # Create class variables to save configs
-        # TODO: Think about sourcing those out in a .config file and add url for federated learning server + logic, maybe in setup.py?
-        self.fl_url = ""
+        # TODO: Think about sourcing those out in a .config file + logic, maybe in setup.py?
         self.pcap_name = ""
         self.allow_training = False
         self.callback_url = None
@@ -64,37 +62,13 @@ class KisshomeIDS:
         self.configure_analysis()
         self.configure_aggregation()
 
-        # Prepare rules and start deamon for the rb component
-        rb_prepare_rules()
+        # Start deamon for the rb component
         rb_start_deamon()
 
         # Set IDS started
         set_state(STARTED)
 
         self.logger.info("Init done")
-
-    def has_fl_connection(self):
-        """
-        Check the fl server connection
-
-        @return: bool if fl server is reachable
-        """
-        try:
-            # Ping the fl server URL
-            cmd = f"ping -c1 {self.fl_url}"
-            self.logger.debug(f"Pinging fl server with {cmd=}")
-            fl_process = subprocess.run(cmd, capture_output=True, shell=True)
-            if fl_process.returncode != 0:
-                # Something went wrong
-                self.logger.warning(f"No fl server connection: {fl_process}")
-                return False
-            else:
-                self.logger.debug("Has fl server connection")
-            return True
-        except Exception as e:
-            self.logger.exception(e)
-            set_state(EXITED)
-            return False
         
     def update_pcap_name(self, new_pcap_name):
         """
@@ -112,13 +86,12 @@ class KisshomeIDS:
         self.configure_aggregation()
         self.logger.debug(f"{new_pcap_name=}")
 
-    def update_configuration(self, callback_url, allow_training, fl_url="https://fl.if-is.net"):
+    def update_configuration(self, callback_url, allow_training):
         """
         Update the configuration params of our IDS environment
 
         @param callback_url: URL of the adapter for receiving the results
         @param allow_training: a var to check if the user allows training
-        @param fl_url: URL of our federated learning server, default string "https://fl.if-is.net"
         @return: nothing
         """
         # Stop analysis first since there are writing processes on the pipe
@@ -128,7 +101,6 @@ class KisshomeIDS:
         # meta_json handled in API
         self.callback_url = callback_url
         self.allow_training = allow_training
-        self.fl_url = fl_url
 
         # Recreate all processes, but don't start automatically
         self.configure_analysis()
