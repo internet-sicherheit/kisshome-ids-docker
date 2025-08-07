@@ -12,7 +12,7 @@ from threading import Lock
 # Define the name of our environment
 ENV_NAME = "KISSHOME IDS"
 # State file saving the current state
-STATE_FILE = "/app/state.json" 
+STATE_FILE = "/config/state.json" 
 # Lock the file access
 LOCK = Lock()
 # Define the states of our environment

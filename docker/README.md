@@ -81,14 +81,6 @@ $ sudo docker build --platform linux/amd64,linux/arm64 -t kisshome/ids:stable-ba
 
 To debug the output of docker it is recommended to use the `--progress=plain` flag. Also, publishing it might go wrong since it has no `manifest`.
 
-## Run
-
-To run the build image with the exposed port and remove it afterward, use
-
-```bash
-$ sudo docker run --rm -d -p 5000:5000 kisshome/ids:stable-backports
-```
-
 ## Pull
 
 To pull an image, use
@@ -96,6 +88,23 @@ To pull an image, use
 ```bash
 $ sudo docker pull kisshome/ids:stable-backports
 ```
+
+## Run
+
+To run the build or pulled image with the exposed port and remove it afterward, use
+
+```bash
+$ sudo docker run --rm -d -p 5000:5000 -v kisshome/ids:stable-backports
+```
+
+If a shared volume (like `/var/log/shared`) is provided, run
+
+```bash
+$ sudo docker run --rm -d -p 5000:5000 --security-opt apparmor=unconfined -v /var/log/shared:/shared:z kisshome/ids:stable-backports
+```
+
+`--security-opt apparmor=unconfined` as well as `:z` prevent Ubuntu/Debian or SELinux Systems from blocking access to the shared volume.
+The volume and the port are customizable.
 
 ## API
 

@@ -13,31 +13,43 @@ RUN pip3 install --break-system-packages flask flask-restx gunicorn schedule dpk
 #RUN suricata-update && suricata-update enable-source abuse.ch/sslbl-blacklist && suricata-update enable-source abuse.ch/sslbl-c2 && suricata-update enable-source abuse.ch/sslbl-ja3 && suricata-update update-sources
 RUN suricata-update && suricata-update enable-source abuse.ch/urlhaus && suricata-update update-sources
 
-# Set up working directory
-WORKDIR /app
+# Copy suricata rules to the default rule path in the yaml
+COPY kisshome.rules /var/lib/suricata/rules/
 
-# Copy suricata configuration and rules
-COPY kisshome.rules /app/
-COPY suricata.yaml /app/
+# Set up working directories
+# First directory is for the shared volume mounted on the host, used later
+WORKDIR /shared
+
+# Second directory is for pipes, used later
+WORKDIR /pipe
+
+# Third directory is for the configuration
+WORKDIR /config
+
+# Copy suricata yaml file to not the default generated yaml file
+COPY suricata.yaml /config/
 
 # Copy csv files
-COPY ip_to_country.csv /app/
-COPY ip_to_asn.csv /app/
+COPY ip_to_country.csv /config/
+COPY ip_to_asn.csv /config/
+
+# Last directory is for the application
+WORKDIR /app
 
 # Copy the python and bash scripts
+COPY start.sh /app/
 COPY flask_api.py /app/
 COPY setup.py /app/
 COPY states.py /app/
-COPY start.sh /app/
 COPY ml_analysis_multiprocess.py /app/
 COPY rb_analysis.py /app/
 COPY aggregator.py /app/
 COPY kisshome_ids.py /app/
 
+RUN chmod a+x /app/start.sh
 RUN chmod a+x /app/flask_api.py
 RUN chmod a+x /app/setup.py
 RUN chmod a+x /app/states.py
-RUN chmod a+x /app/start.sh
 RUN chmod a+x /app/ml_analysis_multiprocess.py
 RUN chmod a+x /app/rb_analysis.py
 RUN chmod a+x /app/aggregator.py

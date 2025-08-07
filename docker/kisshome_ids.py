@@ -6,8 +6,8 @@ Class for the Kisshome IDS
 """
 
 import logging
-import subprocess
 
+from logging.handlers import TimedRotatingFileHandler
 from multiprocessing import *
 from setup import *
 from rb_analysis import *
@@ -19,7 +19,7 @@ from states import set_state, STARTED, EXITED
 formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
 # The log file is the same as the module name plus the suffix ".log"
 # Rotate files each day to max 7 files, oldest will be deleted
-fh = logging.handlers.TimedRotatingFileHandler(filename="/app/kisshome_ids.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
+fh = TimedRotatingFileHandler(filename="/shared/kisshome_ids.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
 sh = logging.StreamHandler()
 fh.setLevel(logging.DEBUG)  # set the log level for the log file
 fh.setFormatter(formatter)
@@ -45,10 +45,9 @@ class KisshomeIDS:
         self.logger = logger
         
         # Create class variables to save configs
-        # TODO: Think about sourcing those out in a .config file + logic, maybe in setup.py?
         self.pcap_name = ""
         self.allow_training = False
-        self.callback_url = None
+        self.callback_url = ""
 
         # Create a list for processes to control them while the IDS is running
         self.analysis_processes = []
@@ -63,28 +62,30 @@ class KisshomeIDS:
         self.configure_aggregation()
 
         # Start deamon for the rb component
-        rb_start_deamon()
+        #rb_start_deamon()
 
         # Set IDS started
         set_state(STARTED)
 
-        self.logger.info("Init done")
+        self.logger.debug("Init done")
         
-    def update_pcap_name(self, new_pcap_name):
+    def update_pcap_name(self, pcap_name):
         """
         Update the name of the pcap
 
-        @param new_pcap_name: new pcap name as a string
+        @param pcap_name: new pcap name as a string
         @return: nothing
         """
         # Only reconfigure aggregator since NO analysis is running when this is called
         self.stop_aggregation()
 
-        self.pcap_name = new_pcap_name
+        self.pcap_name = pcap_name
 
         # Recreate aggregation process
         self.configure_aggregation()
-        self.logger.debug(f"{new_pcap_name=}")
+
+        self.logger.debug(f"{pcap_name=}")
+        self.logger.info("Updated pcap name")
 
     def update_configuration(self, callback_url, allow_training):
         """
@@ -106,7 +107,8 @@ class KisshomeIDS:
         self.configure_analysis()
         self.configure_aggregation()
 
-        self.logger.info("Configured")
+        self.logger.debug(f"{callback_url=}, {allow_training=}")
+        self.logger.info("Updated configuration")
 
     def configure_analysis(self):
         """

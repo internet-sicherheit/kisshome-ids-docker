@@ -1,7 +1,6 @@
 
 #!/usr/bin/env python3
 
-import logging.handlers
 import sys
 import time
 import json
@@ -15,6 +14,7 @@ import bisect
 import ipaddress
 import random
 
+from logging.handlers import TimedRotatingFileHandler
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from functools import lru_cache
@@ -37,7 +37,7 @@ def init_logger():
     formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
     # The log file is the same as the module name plus the suffix ".log"
     # Rotate files each day to max 7 files, oldest will be deleted
-    fh = logging.handlers.TimedRotatingFileHandler(filename="/app/ml_analysis.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
+    fh = TimedRotatingFileHandler(filename="/shared/ml_analysis.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
     sh = logging.StreamHandler()
     fh.setLevel(logging.DEBUG)  # set the log level for the log file
     fh.setFormatter(formatter)
@@ -49,7 +49,7 @@ def init_logger():
     logger.setLevel(logging.INFO)
     logger.propagate = False
 
-KNOWN_DEVICES_JSON_FILE = "/app/meta.json"
+KNOWN_DEVICES_JSON_FILE = "/config/meta.json"
 
 # 
 known_macs = None
@@ -73,8 +73,8 @@ def load_known_device_json():
         logger.info(f"An unexpected error occurred: {str(e)}")
         sys.exit()
 
-COUNTRY_RECOGNITION_CSV_FILE = "/app/ip_to_country.csv"
-ASN_RECOGNITION_CSV_FILE = "/app/ip_to_asn.csv"
+COUNTRY_RECOGNITION_CSV_FILE = "/config/ip_to_country.csv"
+ASN_RECOGNITION_CSV_FILE = "/config/ip_to_asn.csv"
 
 # Global list of (start_int, end_int, country)
 ip_to_country_ranges = []
@@ -509,9 +509,9 @@ def process_packets(pool, pcap):
 # 5) Main
 ########################################
 
-#PCAP_PIPE_PATH = "/app/ml_pcap_pipe"
+#PCAP_PIPE_PATH = "/pipe/ml_pcap_pipe"
 
-#RESULT_PIPE_PATH = "/app/ml_result_pipe"
+#RESULT_PIPE_PATH = "/pipe/ml_result_pipe"
 
 #RESULT_FILE = "/app/ml_results.txt"
 

@@ -5,7 +5,6 @@
 Script to analyze the .pcap files with suricata
 """
 
-import logging.handlers
 import os
 import logging
 import json
@@ -14,13 +13,14 @@ import time
 import tempfile
 import schedule
 
+from logging.handlers import TimedRotatingFileHandler
 from states import set_state, EXITED
 
 # Each log line includes the date and time, the log level, the current function and the message
 formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
 # The log file is the same as the module name plus the suffix ".log"
 # Rotate files each day to max 7 files, oldest will be deleted
-fh = logging.handlers.TimedRotatingFileHandler(filename="/app/rb_analysis.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
+fh = TimedRotatingFileHandler(filename="/shared/rb_analysis.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
 sh = logging.StreamHandler()
 fh.setLevel(logging.DEBUG)  # set the log level for the log file
 fh.setFormatter(formatter)
@@ -33,6 +33,8 @@ default_logger.setLevel(logging.INFO)
 default_logger.propagate = False
 
 
+# Use the default log directory provided by the .yaml file
+SURICATA_YAML_DIRECTORY = "/var/log/suricata"
 # Socket created by the suricata deamon
 RB_SOCKET = ""
 
@@ -49,7 +51,7 @@ def rb_start_deamon(logger=default_logger):
         if rb_prepare_rules():
             # Only start when there is no suricata process running by checking for a .pid file
             if not os.path.exists("/var/run/suricata.pid"):
-                cmd = f"suricata -c /app/suricata.yaml --unix-socket -D"
+                cmd = f"suricata -c /config/suricata.yaml --unix-socket -D"
                 logger.debug(f"Invoking Suricata deamon with {cmd=}")
                 suricatad_process = subprocess.run(cmd, capture_output=True, shell=True)
                 if suricatad_process.returncode != 0:
@@ -59,7 +61,8 @@ def rb_start_deamon(logger=default_logger):
                 else:
                     is_ready = False
                     while not is_ready:
-                        with open(os.path.join("/app", "suricata.log"), "r") as log_file:
+                        # Use the file provided in the .yaml
+                        with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "r") as log_file:
                             for log_line in log_file.readlines():
                                 global RB_SOCKET
                                 if "unix socket" in log_line and not RB_SOCKET:
@@ -105,7 +108,8 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, logger=default_logger):
                     temp_pcap = pcap_file.name
                     logger.debug(f"Created temp file {temp_pcap}")
                 logger.info("Analyzing pcap with Suricatasc")
-                cmd = f"suricatasc {RB_SOCKET} -c 'pcap-file {temp_pcap} /app'"
+                # Use the default log directory to save the results (eve.json)
+                cmd = f"suricatasc {RB_SOCKET} -c 'pcap-file {temp_pcap} {SURICATA_YAML_DIRECTORY}'"
                 logger.debug(f"Invoking Suricatasc with {cmd=}")
                 suricatasc_process = subprocess.run(cmd, capture_output=True, shell=True)
                 if suricatasc_process.returncode != 0:
@@ -159,21 +163,21 @@ def rb_write_results(rb_result_pipe_path, duration, logger=default_logger):
     @param logger: logger for logging, default_logger
     @return: content as a string
     """
-    logger.info(f"Write alerts of /app/eve.json to {rb_result_pipe_path}")
+    logger.info(f"Write alerts of {SURICATA_YAML_DIRECTORY}/eve.json to {rb_result_pipe_path}")
     try: 
-        with open(os.path.join("/app", "eve.json"), "r") as result_file:
+        with open(os.path.join(SURICATA_YAML_DIRECTORY, "eve.json"), "r") as result_file:
             filtered_results = rb_filter_results(result_file.readlines(), duration)
             with open(rb_result_pipe_path, "w") as result_pipe:
                 result_pipe.write(json.dumps(filtered_results))
         # Flush afterward
-        with open(os.path.join("/app", "eve.json"), "w") as eve_file:
+        with open(os.path.join(SURICATA_YAML_DIRECTORY, "eve.json"), "w") as eve_file:
             eve_file.write("")
-        with open(os.path.join("/app", "suricata.log"), "w") as log_file:
+        with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "w") as log_file:
             log_file.write("")
     except Exception as e:
         set_state(EXITED)
         logger.exception(f"Could not write the results: {e}")
-    logger.info(f"Alerts of /app/eve.json written to {rb_result_pipe_path}")
+    logger.info(f"Alerts of {SURICATA_YAML_DIRECTORY}/eve.json written to {rb_result_pipe_path}")
 
 
 def rb_filter_results(eve_json, duration, logger=default_logger):
@@ -231,20 +235,20 @@ def rb_filter_results(eve_json, duration, logger=default_logger):
     return alert_dictionary
 
 
-def rb_check_mac(mac_adresses, logger=default_logger):
+def rb_check_mac(alert_mac_adresses, logger=default_logger):
     """
-    Check if an alert is related to a known mac address from /app/meta.json
+    Check if an alert is related to a known mac address from the meta.json
 
-    @param mac_adresses: all possible macs extracted from /app/eve.json
+    @param alert_mac_adresses: all possible macs extracted from the eve.json
     @return: a valid mac address as a string
     """
     logger.debug(f"Start checking mac")
     try: 
-        with open(os.path.join("/app", "meta.json"), "r") as meta_file:
+        with open(os.path.join("/config", "meta.json"), "r") as meta_file:
             meta_json = json.load(meta_file)
             # TODO: Add examples
             for meta_key in meta_json.keys():
-                if meta_key.lower() in mac_adresses.values():
+                if meta_key.lower() in alert_mac_adresses.values():
                     logger.debug("Finished checking mac")
                     return meta_key.lower()
     except Exception as e:

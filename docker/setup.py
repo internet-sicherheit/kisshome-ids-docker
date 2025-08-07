@@ -8,16 +8,16 @@ Script to set the pipes in the docker container up
 import os
 
 # Rule based (rb) pcap and result pipes
-RB_PCAP_PIPE = os.path.join("/app", "rb_pcap_pipe")
-RB_RESULT_PIPE = os.path.join("/app", "rb_result_pipe")
+RB_PCAP_PIPE = os.path.join("/pipe", "rb_pcap_pipe")
+RB_RESULT_PIPE = os.path.join("/pipe", "rb_result_pipe")
 # Machine learning (ml) pcap and result pipes
-ML_PCAP_PIPE = os.path.join("/app", "ml_pcap_pipe")
-ML_RESULT_PIPE = os.path.join("/app", "ml_result_pipe")
+ML_PCAP_PIPE = os.path.join("/pipe", "ml_pcap_pipe")
+ML_RESULT_PIPE = os.path.join("/pipe", "ml_result_pipe")
 
 
 def set_pcap_pipes():
     """
-    Setup the pcap pipes for the Kisshome IDS environment
+    Set the pcap pipes for the Kisshome IDS environment up
 
     @return: paths of the created pipes
     """
@@ -31,7 +31,7 @@ def set_pcap_pipes():
 
 def set_result_pipes():
     """
-    Setup the result pipes for the Kisshome IDS environment
+    Set the result pipes for the Kisshome IDS environment up
 
     @return: paths of the created pipes
     """

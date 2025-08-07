@@ -6,12 +6,12 @@ Script to aggregate the data and send it back to the adapter
 """
 
 import logging
-import logging.handlers
 import requests
 import os
 import json
 import random
 
+from logging.handlers import TimedRotatingFileHandler
 from states import get_state, set_state, ANALYZING, RUNNING, EXITED
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -21,7 +21,7 @@ from ast import literal_eval
 formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
 # The log file is the same as the module name plus the suffix ".log"
 # Rotate files each day to max 7 files, oldest will be deleted
-fh = logging.handlers.TimedRotatingFileHandler(filename="/app/aggregator.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
+fh = TimedRotatingFileHandler(filename="/shared/aggregator.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
 sh = logging.StreamHandler()
 fh.setLevel(logging.DEBUG)  # set the log level for the log file
 fh.setFormatter(formatter)
@@ -77,7 +77,7 @@ def aggregate_pipes(rb_pipe_dict, ml_pipe_dict, logger=default_logger):
     # Aggregate the detections first
     # Get known macs from meta.json
     known_macs = []
-    with open(os.path.join("/app", "meta.json"), "r") as meta_file:
+    with open(os.path.join("/config", "meta.json"), "r") as meta_file:
         known_macs = json.load(meta_file).keys()
 
     for mac in known_macs:

@@ -5,12 +5,12 @@
 Script to start the API 
 """
 
-import logging.handlers
 import os
 import logging
 import json
 import time
 
+from logging.handlers import TimedRotatingFileHandler
 from flask import Flask, request
 from flask_restx import Api, Resource, fields, reqparse, inputs
 from werkzeug.datastructures import FileStorage
@@ -22,7 +22,7 @@ from states import *
 formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
 # The log file is the same as the module name plus the suffix ".log"
 # Rotate files each day to max 7 files, oldest will be deleted
-fh = logging.handlers.TimedRotatingFileHandler(filename="/app/flask_api.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
+fh = TimedRotatingFileHandler(filename="/shared/flask_api.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
 sh = logging.StreamHandler()
 fh.setLevel(logging.DEBUG)  # set the log level for the log file
 fh.setFormatter(formatter)
@@ -36,7 +36,7 @@ logger.propagate = False
 
 
 # Version
-VERSION = "1.1.4"
+VERSION = "1.1.5"
 
 # Initialize Lock for fifo pipes
 pipe_lock = Lock()
@@ -46,7 +46,9 @@ app = Flask(__name__)
 
 api = Api(app, version=VERSION, title=f'{ENV_NAME} API',
           description=f'A RESTful API to interact with the {ENV_NAME}')
+
 ns = api.namespace("", description=f"{ENV_NAME} operations")
+
 # Models for JSON like requests or responses
 status_configuration_model = ns.model("Status configuration",
     {
@@ -103,8 +105,8 @@ class Status(Resource):
         try:
             # Load meta_json if it exists 
             meta_json = {}
-            if os.path.exists(os.path.join("/app", "meta.json")):
-                with open(os.path.join("/app", "meta.json"), "r") as meta_file:
+            if os.path.exists(os.path.join("/config", "meta.json")):
+                with open(os.path.join("/config", "meta.json"), "r") as meta_file:
                     meta_json = json.load(meta_file)
             # Return json
             message = {"Version": VERSION,
@@ -146,12 +148,12 @@ class Configuration(Resource):
                 ids.update_configuration(args['callback_url'], args['allow_training'])
                 
                 # Write meta_json directly to disk
-                if os.path.exists(os.path.join("/app", "meta.json")):
+                if os.path.exists(os.path.join("/config", "meta.json")):
                     # Flush content if it exist
-                    with open(os.path.join("/app", "meta.json"), "w") as meta_file:
+                    with open(os.path.join("/config", "meta.json"), "w") as meta_file:
                         meta_file.write("")
 
-                with open(os.path.join("/app", "meta.json"), "w") as meta_file:
+                with open(os.path.join("/config", "meta.json"), "w") as meta_file:
                     meta_json = args['meta_json']
                     json.dump(json.load(meta_json), meta_file)
                 
@@ -224,46 +226,6 @@ class Pcap(Resource):
             except Exception as e:
                 set_state(EXITED)
                 return {"Result": "Failed", "Message": e}, 500
-
-
-log_ns = api.namespace("log", description=f"{ENV_NAME} logs") 
-@log_ns.route("")
-@api.doc(responses={200: f"Ok", 
-                    500: f"Internal Server Error"})
-class Log(Resource):
-    def get(self):
-        """Returns the contents of the log files as a json"""
-        result_json = {}
-        try:
-            if os.path.exists("/app/kisshome_ids.log"):
-                with open("/app/kisshome_ids.log", "r") as kisshome_ids_log:
-                    result_json["kisshome_ids"] = kisshome_ids_log.readlines()
-            else:
-                result_json["kisshome_ids"] = None
-            if os.path.exists("/app/aggregator.log"):
-                with open("/app/aggregator.log", "r") as aggregator_log:
-                    result_json["aggregator"] = aggregator_log.readlines()
-            else:
-                result_json["aggregator"] = None
-            if os.path.exists("/app/rb_analysis.log"):
-                with open("/app/rb_analysis.log", "r") as rb_log:
-                    result_json["rb"] = rb_log.readlines()
-            else:
-                result_json["rb"] = None
-            if os.path.exists("/app/ml_analysis.log"):
-                with open("/app/ml_analysis.log", "r") as ml_log:
-                    result_json["ml"] = ml_log.readlines()
-            else:
-                result_json["ml"] = None
-            if os.path.exists("/app/flask_api.log"):
-                with open("/app/flask_api.log", "r") as api_log:
-                    result_json["api"] = api_log.readlines()
-            else:
-                result_json["api"] = None
-            return {"Result": "Success", "Message": result_json}, 200
-        except Exception as e:
-            set_state(EXITED)
-            return {"Result": "Failed", "Message": e}, 500
         
 
 #if __name__ == '__main__':
