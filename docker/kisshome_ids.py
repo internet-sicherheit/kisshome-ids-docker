@@ -62,7 +62,7 @@ class KisshomeIDS:
         self.configure_aggregation()
 
         # Start deamon for the rb component
-        #rb_start_deamon()
+        rb_start_deamon()
 
         # Set IDS started
         set_state(STARTED)
