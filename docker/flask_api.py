@@ -14,6 +14,7 @@ from logging.handlers import TimedRotatingFileHandler
 from flask import Flask, request
 from flask_restx import Api, Resource, fields, reqparse, inputs
 from werkzeug.datastructures import FileStorage
+from werkzeug.exceptions import InternalServerError
 from threading import Lock
 from kisshome_ids import KisshomeIDS
 from states import *
@@ -43,6 +44,30 @@ pipe_lock = Lock()
 
 # Initialize app and make it RESTful
 app = Flask(__name__)
+
+
+def configure_app(flask_app):
+    flask_app.config['SWAGGER_UI_DOC_EXPANSION'] = True
+    flask_app.config['RESTX_VALIDATE'] = True
+    flask_app.config['RESTX_MASK_SWAGGER'] = False
+    flask_app.config['ERROR_404_HELP'] = True  # False in prod
+    logger.info(f"Start Flask API")
+
+
+# Configure API
+configure_app(app)
+
+
+ids = None
+
+
+# Make sure the ids is run as a singleton
+@app.before_request
+def setup_ids():
+    global ids
+    if not ids:
+        ids = KisshomeIDS()
+
 
 api = Api(app, version=VERSION, title=f'{ENV_NAME} API',
           description=f'A RESTful API to interact with the {ENV_NAME}')
@@ -78,21 +103,7 @@ config_parser.add_argument('allow_training', location='form', type=inputs.boolea
 
 pcap_parser = reqparse.RequestParser()
 pcap_parser.add_argument('pcap_name', location='args', type=str, required=True, help='The name of the pcap file')
-pcap_parser.add_argument('data', location='files', type=FileStorage, required=True, help='PCAP file')
-
-ids = KisshomeIDS()
-
-            
-def configure_app(flask_app):
-    flask_app.config['SWAGGER_UI_DOC_EXPANSION'] = True
-    flask_app.config['RESTX_VALIDATE'] = True
-    flask_app.config['RESTX_MASK_SWAGGER'] = False
-    flask_app.config['ERROR_404_HELP'] = True  # False in prod
-    logger.info(f"Start Flask API")
-
-
-# Configure API
-configure_app(app)
+pcap_parser.add_argument('pcap', location='files', type=FileStorage, required=True, help='The pcap file')
 
 
 @ns.route("/status")
@@ -124,7 +135,7 @@ class Status(Resource):
                     429: f"{ENV_NAME} busy",
                     500: f"Internal Server Error",
                     503: f"{ENV_NAME} unavailable"}, 
-         params={"meta_json": {"description": "The list with device MACs for filtering", "type": "json"},
+         params={"meta_json": {"description": "The list with device MACs for filtering", "type": "file"},
                  "callback_url": {"description": "The URL to send the results of the IDS", "type": "string"},
                  "allow_training": {"description": "Is training allowed", "type": "boolean"}})
 class Configuration(Resource):
@@ -174,7 +185,8 @@ class Configuration(Resource):
                     429: f"{ENV_NAME} busy", 
                     500: f"Internal Server Error",
                     503: f"{ENV_NAME} unavailable"},
-         params={"pcap_name": {"description": "The name of the pcap file", "type": "string"}})
+         params={"pcap_name": {"description": "The name of the pcap file", "type": "string"},
+                 "pcap": {"description": "The pcap file", "type": "file"}})
 class Pcap(Resource):
     @ns.expect(pcap_parser)
     def post(self):
