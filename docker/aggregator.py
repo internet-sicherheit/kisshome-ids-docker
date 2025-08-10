@@ -111,7 +111,7 @@ def aggregate_pipes(rb_pipe_dict, ml_pipe_dict, logger=default_logger):
             new_ml_detection = {
                 "type": "Normal", 
                 "description": "0 Anomalies detected",
-                "first_occurrence": str(datetime.now(ZoneInfo("Europe/Berlin")).strftime("%d.%m.%Y %H:%M:%S %Z%z")),
+                "first_occurrence": datetime.now(ZoneInfo("Europe/Berlin")).isoformat(),
                 "number_occurrences": 0,
                 "score": round(random.uniform(0, 10), 2)
                 } 
@@ -262,7 +262,7 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=de
             # Merge to a final result as json
             try:
                 info = {"file": pcap_name, 
-                        "time": datetime.now(ZoneInfo("Europe/Berlin")).strftime("%d.%m.%Y %H:%M:%S %Z%z"), 
+                        "time": datetime.now(ZoneInfo("Europe/Berlin")).isoformat(), 
                         "result": {"status": "success"}
                         }
                 data = aggregate_pipes(dict(literal_eval(rb_pipe.read().strip())), dict(literal_eval(ml_pipe.read().strip())))

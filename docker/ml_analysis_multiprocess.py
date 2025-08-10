@@ -555,7 +555,7 @@ def flush_results(result_pipe, results, device_statistics, analysis_duration_ms,
             warning = {
                 "type": "Warning", 
                 "description": f"{test_occurrence} Anomalies detected",
-                "first_occurrence": str(datetime.now(ZoneInfo("Europe/Berlin")).strftime("%d.%m.%Y %H:%M:%S %Z%z")),
+                "first_occurrence": str(datetime.now(ZoneInfo("Europe/Berlin")).isoformat()),
                 "number_occurrences": test_occurrence # Random
             }
             detections.append({"mac": mac, "ml": warning})
@@ -563,7 +563,7 @@ def flush_results(result_pipe, results, device_statistics, analysis_duration_ms,
             normal = {
                 "type": "Normal", 
                 "description": f"{test_occurrence} Anomalies detected", 
-                "first_occurrence": str(datetime.now(ZoneInfo("Europe/Berlin")).strftime("%d.%m.%Y %H:%M:%S %Z%z")),
+                "first_occurrence": str(datetime.now(ZoneInfo("Europe/Berlin")).isoformat()),
                 "number_occurrences": test_occurrence # Random
             }
             detections.append({"mac": mac, "ml": normal})
