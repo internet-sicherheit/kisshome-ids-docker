@@ -225,7 +225,7 @@ class Pcap(Resource):
                         if "application/octet-stream" in request.content_type:
                             pcap = request.data
                         if "multipart/form-data" in request.content_type:
-                            pcap = request.files['data'].read()
+                            pcap = request.files['pcap'].read()
                         else:
                             raise Exception(f"Pcap data for {pcap_name} not found")
 
