@@ -36,7 +36,9 @@ default_logger.propagate = False
 # Use the default log directory provided by the .yaml file
 SURICATA_YAML_DIRECTORY = "/var/log/suricata"
 # Socket created by the suricata deamon
-RB_SOCKET = ""
+RB_SOCKET = None
+# Path to meta.json
+META_JSON = None
 
 
 def rb_start_deamon(logger=default_logger):
@@ -80,16 +82,21 @@ def rb_start_deamon(logger=default_logger):
         set_state(EXITED)
         logger.exception(f"Could not start Suricata deamon: {e}")
 
-def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, logger=default_logger):
+def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, meta_json, logger=default_logger):
     """
     Analyze the network flow with rules from suricata
     
     @param rb_pcap_pipe_path: path to the pipe with the .pcap content
     @param rb_result_pipe_path: path to the pipe for the result content
+    @param meta_json: path to the meta.json
     @param logger: logger for logging, default_logger
     @return: nothing
     """
     logger.info(f"Start using suricata to analyze pcap data")
+    # First update global path to meta.json file
+    global META_JSON
+    if not META_JSON:
+        META_JSON = meta_json
     # Use suricata on the provided pcap content
     try:
         # Set the rule update process first so that rules are updated daily using schedule modul
@@ -244,9 +251,8 @@ def rb_check_mac(alert_mac_adresses, logger=default_logger):
     """
     logger.debug(f"Start checking mac")
     try: 
-        with open(os.path.join("/config", "meta.json"), "r") as meta_file:
+        with open(META_JSON, "r") as meta_file:
             meta_json = json.load(meta_file)
-            # TODO: Add examples
             for meta_key in meta_json.keys():
                 if meta_key.lower() in alert_mac_adresses.values():
                     logger.debug("Finished checking mac")

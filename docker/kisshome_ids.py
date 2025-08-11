@@ -49,13 +49,17 @@ class KisshomeIDS:
         self.allow_training = False
         self.callback_url = ""
 
-        # Create a list for processes to control them while the IDS is running
-        self.analysis_processes = []
-        self.aggregation_processes = []
+        # Set path for the meta.json
+        if not os.path.exists(os.path.join("/config", "meta.json")): # Should not exist
+            self.meta_json = os.path.join("/config", "meta.json")
 
         # Create and set all pipe paths
         self.rb_pcap_pipe, self.ml_pcap_pipe = set_pcap_pipes()
         self.rb_result_pipe, self.ml_result_pipe = set_result_pipes()
+
+        # Create a list for processes to control them while the IDS is running
+        self.analysis_processes = []
+        self.aggregation_processes = []
 
         # Configure the processes to set everything up and enable all API endpoints
         self.configure_analysis()
@@ -118,10 +122,10 @@ class KisshomeIDS:
         """
         try:
             # Create new processes for the analysis
-            rb_process = Process(target=rb_analyze, name="rb_process", args=(self.rb_pcap_pipe, self.rb_result_pipe))
+            rb_process = Process(target=rb_analyze, name="rb_process", args=(self.rb_pcap_pipe, self.rb_result_pipe, self.meta_json))
             self.analysis_processes.append(rb_process)
 
-            ml_process = Process(target=ml_analyze, name="ml_process", args=(self.ml_pcap_pipe, self.ml_result_pipe, self.allow_training))
+            ml_process = Process(target=ml_analyze, name="ml_process", args=(self.ml_pcap_pipe, self.ml_result_pipe, self.meta_json, self.allow_training))
             self.analysis_processes.append(ml_process)
 
             self.logger.info("Analysis configured")

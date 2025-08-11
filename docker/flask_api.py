@@ -37,7 +37,18 @@ logger.propagate = False
 
 
 # Version
-VERSION = "1.1.5"
+VERSION = "1.1.6"
+
+# For pcap check
+PCAP_MAGIC_NUMBERS = {
+    b'\xd4\xc3\xb2\xa1',  # pcap little-endian
+    b'\xa1\xb2\xc3\xd4',  # pcap big-endian
+    b'\x4d\x3c\xb2\xa1',  # pcap nano sec little-endian
+    b'\xa1\xb2\x3c\x4d'   # pcap nano sec big-endian
+}
+
+# For pcapng check
+PCAPNG_MAGIC_NUMBER = b'\x0a\x0d\x0d\x0a'  # pcapng
 
 # Initialize Lock for fifo pipes
 pipe_lock = Lock()
@@ -116,8 +127,8 @@ class Status(Resource):
         try:
             # Load meta_json if it exists 
             meta_json = {}
-            if os.path.exists(os.path.join("/config", "meta.json")):
-                with open(os.path.join("/config", "meta.json"), "r") as meta_file:
+            if os.path.exists(ids.meta_json):
+                with open(ids.meta_json, "r") as meta_file:
                     meta_json = json.load(meta_file)
             # Return json
             message = {"Version": VERSION,
@@ -155,23 +166,35 @@ class Configuration(Resource):
                 
                 args = config_parser.parse_args()
 
-                # Update config
-                ids.update_configuration(args['callback_url'], args['allow_training'])
-                
-                # Write meta_json directly to disk
-                if os.path.exists(os.path.join("/config", "meta.json")):
-                    # Flush content if it exist
-                    with open(os.path.join("/config", "meta.json"), "w") as meta_file:
-                        meta_file.write("")
+                # Parse args
+                meta_json = args.get('meta_json')
+                callback_url = args.get('callback_url')
+                allow_training = args.get('allow_training')
 
-                with open(os.path.join("/config", "meta.json"), "w") as meta_file:
-                    meta_json = args['meta_json']
-                    json.dump(json.load(meta_json), meta_file)
+                # Update config
+                ids.update_configuration(callback_url, allow_training)
+                
+                meta_data = None
+                # Attached file
+                if "multipart/form-data" in request.content_type:
+                    meta_data = json.load(meta_json)
+                # File as bytestream
+                elif "application/json" in request.content_type:
+                    meta_data = request.json
+                else:
+                    raise Exception(f"Invalid content type: {request.content_type}")
+
+                # Write meta_json directly to disk
+                with open(ids.meta_json, "w") as meta_file:
+                    if os.path.exists(ids.meta_json):
+                        # Flush content if it exist
+                        meta_file.write("")
+                    json.dump(meta_data, meta_file)
                 
                 # Set state to running now
                 set_state(RUNNING)
 
-                logger.debug(f"New configuration: callback_url={args['callback_url']}, allow_training={args['allow_training']}, meta_json={args['meta_json']}")
+                logger.debug(f"New configuration: callback_url={callback_url}, allow_training={allow_training}, meta_json={meta_json}")
 
                 return {"Result": "Success", "Message": "Configuration set"}, 200
             except Exception as e:
@@ -193,7 +216,8 @@ class Pcap(Resource):
         """Receives pcap data and writes it to the named pipes"""
         if EXITED in get_state():
             # IDS has exited, return 503 service unavailable
-            return {"Result": "Failed", "Message": f"{ENV_NAME} has exited, state: {get_state()}"}, 503
+            return {"Result": "Failed", "Message": 
+                    f"{ENV_NAME} has exited, state: {get_state()}"}, 503
         if STARTED in get_state():
             # IDS is not configured yet, return 409 conflict
             return {"Result": "Failed", "Message": f"{ENV_NAME} not configured, state: {get_state()}"}, 409
@@ -202,16 +226,37 @@ class Pcap(Resource):
             return {"Result": "Failed", "Message": f"{ENV_NAME} busy, state: {get_state()}"}, 429
         else:
             try:
-                pcap_name = request.args.get('pcap_name')
+                # Set new state to prevent other calls on /pcap
+                set_state(ANALYZING)
+
+                args = pcap_parser.parse_args()
+
+                # Parse args
+                pcap_name = args.get('pcap_name')
+                pcap = args.get('pcap')
+
                 ids.update_pcap_name(pcap_name)
+
+                pcap_data = None
+                # Attached file
+                if "multipart/form-data" in request.content_type:
+                    pcap_data = pcap.read()
+                # File as bytestream
+                elif "application/octet-stream" in request.content_type:
+                    pcap_data = request.data
+                else:
+                    raise Exception(f"Invalid content type: {request.content_type}")
+
+                # Check if the first 4 bytes are the magic pcap(ng) bytes
+                magic_bytes = pcap_data[:4]
+                if not (magic_bytes in PCAP_MAGIC_NUMBERS or magic_bytes == PCAPNG_MAGIC_NUMBER):
+                    raise Exception(f"Invalid pcap data for {pcap_name}")
 
                 # Start aggregation before analysis to enable reading pipes first
                 ids.start_aggregation()
                 time.sleep(1)
                 ids.start_analysis()
 
-                # Set new state to prevent other calls on /pcap
-                set_state(ANALYZING)
 
                 # Lock in case of successive pcaps being sent too fast synchronously
                 with pipe_lock:
@@ -221,18 +266,10 @@ class Pcap(Resource):
                         # start asynchronously anyway (not possible in dpkt) and therefore save cpu on many chunked writes.
                         # If memory from sent pcap data becomes an issue, we might look at shared memory solutions instead of pipes
 
-                        pcap = None
-                        if "application/octet-stream" in request.content_type:
-                            pcap = request.data
-                        if "multipart/form-data" in request.content_type:
-                            pcap = request.files['pcap'].read()
-                        else:
-                            raise Exception(f"Pcap data for {pcap_name} not found")
+                        rb_pipe.write(pcap_data)
+                        ml_pipe.write(pcap_data)
 
-                        rb_pipe.write(pcap)
-                        ml_pipe.write(pcap)
-
-                        logger.debug(f"Pipes written with {len(pcap)} bytes from {pcap_name=}")
+                        logger.debug(f"Pipes written with {len(pcap_data)} bytes from {pcap_name=}")
 
                 return {"Result": "Success", "Message": f"Pcap {pcap_name} received, start {ENV_NAME}"}, 200
             except Exception as e:

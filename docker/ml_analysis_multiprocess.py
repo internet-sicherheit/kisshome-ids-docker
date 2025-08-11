@@ -49,7 +49,7 @@ def init_logger():
     logger.setLevel(logging.INFO)
     logger.propagate = False
 
-KNOWN_DEVICES_JSON_FILE = "/config/meta.json"
+KNOWN_DEVICES_JSON_FILE = None
 
 # 
 known_macs = None
@@ -275,7 +275,7 @@ def extract_details(packet):
         details["asn"] = get_asn(details.get('src_ip'))
 
     else:
-        logger.info(f"Both source and dst mac are unknown: {details.get('src_mac')=}, {details.get('dst_mac')=}. This should probably not happen")
+        logger.debug(f"Both source and dst mac are unknown: {details.get('src_mac')=}, {details.get('dst_mac')=}. This should probably not happen")
         # TODO: do nothing here
         # TODO: both are in known macs?
         details["direction"] = -1
@@ -645,8 +645,13 @@ def start_analysis(pool, pcap_pipe, result_pipe):
                 logger.exception(f"Unknown error parsing pcap: {e}")
             
 # if __name__ == "__main__":
-def ml_analyze(pcap_pipe, result_pipe, allow_training):
-    # Do setup first to init every component
+def ml_analyze(pcap_pipe, result_pipe, meta_json, allow_training):
+    # Set up global meta.json path
+    global KNOWN_DEVICES_JSON_FILE
+    if not KNOWN_DEVICES_JSON_FILE:
+        KNOWN_DEVICES_JSON_FILE = meta_json
+
+    # Do setup to init every component
     setup()
 
     # TODO: Create usage for this var
