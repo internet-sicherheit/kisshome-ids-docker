@@ -40,7 +40,7 @@ $ sudo docker buildx create --use --name multiarch_builder
 To publish the build, run
 
 ```bash
-$ sudo docker buildx build --platform linux/amd64,linux/arm64 -t dgrossenbach/ids:stable-backports --push .
+$ sudo docker buildx build --platform linux/amd64,linux/arm64 -t dgrossenbach/ids:stable --push .
 ```
 
 ### Containerd (Not recommended)
@@ -70,13 +70,13 @@ $ sudo systemctl restart docker
 Since we build manually, we need to replace the first line in the `Dockerfile` by adding `--platform=$BUILDPLATFORM`:
 
 ```bash
-FROM --platform=$BUILDPLATFORM debian:stable-backports
+FROM --platform=$BUILDPLATFORM debian:stable
 ```
 
 Then, to build the present docker image for `arm` and `x64`, use
 
 ```bash
-$ sudo docker build --platform linux/amd64,linux/arm64 -t kisshome/ids:stable-backports .
+$ sudo docker build --platform linux/amd64,linux/arm64 -t kisshome/ids:stable .
 ```
 
 To debug the output of docker it is recommended to use the `--progress=plain` flag. Also, publishing it might go wrong since it has no `manifest`.
@@ -86,7 +86,7 @@ To debug the output of docker it is recommended to use the `--progress=plain` fl
 To pull an image, use
 
 ```bash
-$ sudo docker pull kisshome/ids:stable-backports
+$ sudo docker pull kisshome/ids:stable
 ```
 
 ## Run
@@ -94,7 +94,7 @@ $ sudo docker pull kisshome/ids:stable-backports
 To run the build or pulled image with the exposed port and remove it afterward, use
 
 ```bash
-$ sudo docker run --rm -d -p 5000:5000 -v kisshome/ids:stable-backports
+$ sudo docker run --rm -d -p 5000:5000 -v kisshome/ids:stable
 ```
 
 If a shared volume (like `/var/log/shared`) is provided, run
@@ -102,7 +102,7 @@ If a shared volume (like `/var/log/shared`) is provided, run
 ```bash
 $ sudo mkdir -p /var/log/shared
 
-$ sudo docker run --rm -d -p 5000:5000 --security-opt apparmor=unconfined -v /var/log/shared:/shared:Z kisshome/ids:stable-backports
+$ sudo docker run --rm -d -p 5000:5000 --security-opt apparmor=unconfined -v /var/log/shared:/shared:Z kisshome/ids:stable
 ```
 
 `--security-opt apparmor=unconfined` as well as `:z` prevent Ubuntu/Debian or SELinux Systems from blocking access to the shared volume.

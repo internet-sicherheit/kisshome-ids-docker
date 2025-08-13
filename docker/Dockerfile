@@ -1,9 +1,9 @@
 # Use debian for the docker image from dockerhub for all architecture
-#FROM --platform=$BUILDPLATFORM debian:stable-backports
-FROM debian:stable-backports
+#FROM --platform=$BUILDPLATFORM debian:stable
+FROM debian:stable
 
 # Install apt dependencies
-RUN apt update && apt install -y -t stable-backports python3 python3-pip suricata && apt clean
+RUN apt update && apt install -y python3 python3-pip suricata && apt clean
 
 # Install python dependencies
 RUN pip3 install --break-system-packages flask flask-restx gunicorn schedule dpkt numpy tensorflow
