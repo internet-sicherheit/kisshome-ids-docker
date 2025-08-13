@@ -162,9 +162,6 @@ class Configuration(Resource):
             return {"Result": "Failed", "Message": f"{ENV_NAME} busy, state: {get_state()}"}, 429
         if STARTED in get_state() or RUNNING in get_state() or ANALYZING in get_state():
             try:
-                # Set state to prevent sending files via /pcap until it is done
-                set_state(CONFIGURING)
-                
                 args = config_parser.parse_args()
 
                 # Parse args
@@ -184,6 +181,9 @@ class Configuration(Resource):
                     meta_data = request.json
                 else:
                     return {"Result": "Failed", "Message": "Invalid content type"}, 415
+
+                # Set state to prevent sending files via /pcap until it is done
+                set_state(CONFIGURING)
 
                 # Write meta_json directly to disk
                 with open(ids.meta_json, "w") as meta_file:
@@ -228,9 +228,6 @@ class Pcap(Resource):
             return {"Result": "Failed", "Message": f"{ENV_NAME} busy, state: {get_state()}"}, 429
         else:
             try:
-                # Set new state to prevent other calls on /pcap
-                set_state(ANALYZING)
-
                 args = pcap_parser.parse_args()
 
                 # Parse args
@@ -253,6 +250,9 @@ class Pcap(Resource):
                 magic_bytes = pcap_data[:4]
                 if not (magic_bytes in PCAP_MAGIC_NUMBERS or magic_bytes == PCAPNG_MAGIC_NUMBER):
                     return {"Result": "Failed", "Message": "Received invalid pcap data"}, 400
+                
+                # Set new state to prevent other calls on /pcap
+                set_state(ANALYZING)
 
                 # Start aggregation before analysis to enable reading pipes first
                 ids.start_aggregation()
