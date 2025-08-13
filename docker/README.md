@@ -102,7 +102,7 @@ If a shared volume (like `/var/log/shared`) is provided, run
 ```bash
 $ sudo mkdir -p /var/log/shared
 
-$ sudo docker run --rm -d -p 5000:5000 --security-opt apparmor=unconfined -v /var/log/shared:/shared:z kisshome/ids:stable-backports
+$ sudo docker run --rm -d -p 5000:5000 --security-opt apparmor=unconfined -v /var/log/shared:/shared:Z kisshome/ids:stable-backports
 ```
 
 `--security-opt apparmor=unconfined` as well as `:z` prevent Ubuntu/Debian or SELinux Systems from blocking access to the shared volume.

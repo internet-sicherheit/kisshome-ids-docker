@@ -138,11 +138,12 @@ class Status(Resource):
             return {"Result": "Success", "Message": message}, 200
         except Exception as e:
             set_state(EXITED)
-            return {"Result": "Failed", "Message": e}, 500
+            return {"Result": "Failed", "Message": str(e)}, 500
 
 
 @ns.route("/configure")
-@api.doc(responses={200: f"Configuration set", 
+@api.doc(responses={200: f"Configuration set",
+                    415: f"Invalid content type", 
                     429: f"{ENV_NAME} busy",
                     500: f"Internal Server Error",
                     503: f"{ENV_NAME} unavailable"}, 
@@ -182,7 +183,7 @@ class Configuration(Resource):
                 elif "application/json" in request.content_type:
                     meta_data = request.json
                 else:
-                    raise Exception(f"Invalid content type: {request.content_type}")
+                    return {"Result": "Failed", "Message": "Invalid content type"}, 415
 
                 # Write meta_json directly to disk
                 with open(ids.meta_json, "w") as meta_file:
@@ -199,12 +200,14 @@ class Configuration(Resource):
                 return {"Result": "Success", "Message": "Configuration set"}, 200
             except Exception as e:
                 set_state(EXITED)
-                return {"Result": "Failed", "Message": e}, 500
+                return {"Result": "Failed", "Message": str(e)}, 500
         
 
 @ns.route("/pcap")
-@api.doc(responses={200: f"Pcap received, start {ENV_NAME}", 
-                    409: f"{ENV_NAME} not configured",  
+@api.doc(responses={200: f"Pcap received, start {ENV_NAME}",
+                    400: f"Received invalid pcap data", 
+                    409: f"{ENV_NAME} not configured", 
+                    415: f"Invalid content type", 
                     429: f"{ENV_NAME} busy", 
                     500: f"Internal Server Error",
                     503: f"{ENV_NAME} unavailable"},
@@ -216,8 +219,7 @@ class Pcap(Resource):
         """Receives pcap data and writes it to the named pipes"""
         if EXITED in get_state():
             # IDS has exited, return 503 service unavailable
-            return {"Result": "Failed", "Message": 
-                    f"{ENV_NAME} has exited, state: {get_state()}"}, 503
+            return {"Result": "Failed", "Message": f"{ENV_NAME} has exited, state: {get_state()}"}, 503
         if STARTED in get_state():
             # IDS is not configured yet, return 409 conflict
             return {"Result": "Failed", "Message": f"{ENV_NAME} not configured, state: {get_state()}"}, 409
@@ -245,18 +247,17 @@ class Pcap(Resource):
                 elif "application/octet-stream" in request.content_type:
                     pcap_data = request.data
                 else:
-                    raise Exception(f"Invalid content type: {request.content_type}")
+                    return {"Result": "Failed", "Message": "Invalid content type"}, 415
 
                 # Check if the first 4 bytes are the magic pcap(ng) bytes
                 magic_bytes = pcap_data[:4]
                 if not (magic_bytes in PCAP_MAGIC_NUMBERS or magic_bytes == PCAPNG_MAGIC_NUMBER):
-                    raise Exception(f"Invalid pcap data for {pcap_name}")
+                    return {"Result": "Failed", "Message": "Received invalid pcap data"}, 400
 
                 # Start aggregation before analysis to enable reading pipes first
                 ids.start_aggregation()
                 time.sleep(1)
                 ids.start_analysis()
-
 
                 # Lock in case of successive pcaps being sent too fast synchronously
                 with pipe_lock:
@@ -274,7 +275,7 @@ class Pcap(Resource):
                 return {"Result": "Success", "Message": f"Pcap {pcap_name} received, start {ENV_NAME}"}, 200
             except Exception as e:
                 set_state(EXITED)
-                return {"Result": "Failed", "Message": e}, 500
+                return {"Result": "Failed", "Message": str(e)}, 500
         
 
 #if __name__ == '__main__':
