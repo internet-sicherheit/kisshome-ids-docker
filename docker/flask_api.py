@@ -41,14 +41,16 @@ VERSION = "1.1.6"
 
 # For pcap check
 PCAP_MAGIC_NUMBERS = {
-    b'\xd4\xc3\xb2\xa1',  # pcap little-endian
-    b'\xa1\xb2\xc3\xd4',  # pcap big-endian
-    b'\x4d\x3c\xb2\xa1',  # pcap nano sec little-endian
-    b'\xa1\xb2\x3c\x4d'   # pcap nano sec big-endian
+    b"\xa1\xb2\xc3\xd4",  # Big-endian, microsecond resolution (standard)
+    b"\xd4\xc3\xb2\xa1",  # Little-endian, microsecond resolution (standard)
+    b"\xa1\xb2\x3c\x4d",  # Big-endian, nanosecond resolution (standard)
+    b"\x4d\x3c\xb2\xa1",  # Little-endian, nanosecond resolution (standard)
+    b"\xa1\xb2\xcd\x34",  # Big-endian, microsecond resolution (Fritz!Box / rare embedded variant)
+    b"\x34\xcd\xb2\xa1"   # Little-endian, microsecond resolution (Fritz!Box / rare embedded variant)
 }
 
 # For pcapng check
-PCAPNG_MAGIC_NUMBER = b'\x0a\x0d\x0d\x0a'  # pcapng
+PCAPNG_MAGIC_NUMBER = b'\x0a\x0d\x0d\x0a'  # Bi-endian, pcapng (standard)
 
 # Initialize Lock for fifo pipes
 pipe_lock = Lock()
