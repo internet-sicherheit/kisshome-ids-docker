@@ -551,15 +551,17 @@ def flush_results(result_pipe, results, device_statistics, analysis_duration_ms,
 
         test_occurrence = random.randint(1, 100) # TODO: Showcase
 
-        if score > 0.5:
-            warning = {
-                "type": "Warning", 
+        test_threshold = 0.5
+
+        if score > test_threshold:
+            alert = {
+                "type": "Alert", 
                 "description": f"{test_occurrence} Anomalies detected",
                 "first_occurrence": str(datetime.now(ZoneInfo("Europe/Berlin")).isoformat()),
                 "number_occurrences": test_occurrence # Random
             }
-            detections.append({"mac": mac, "ml": warning})
-        elif score < 0.5:
+            detections.append({"mac": mac, "ml": alert})
+        elif score <= test_threshold:
             normal = {
                 "type": "Normal", 
                 "description": f"{test_occurrence} Anomalies detected", 

@@ -50,8 +50,7 @@ class KisshomeIDS:
         self.callback_url = ""
 
         # Set path for the meta.json
-        if not os.path.exists(os.path.join("/config", "meta.json")): # Should not exist
-            self.meta_json = os.path.join("/config", "meta.json")
+        self.meta_json = os.path.join("/config", "meta.json")
 
         # Create and set all pipe paths
         self.rb_pcap_pipe, self.ml_pcap_pipe = set_pcap_pipes()
