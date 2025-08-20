@@ -37,7 +37,7 @@ logger.propagate = False
 
 
 # Version
-VERSION = "1.1.8"
+VERSION = "1.1.9"
 
 # For pcap check
 PCAP_MAGIC_NUMBERS = {

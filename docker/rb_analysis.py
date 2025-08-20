@@ -49,10 +49,10 @@ def rb_start_deamon(logger=default_logger):
     @return: nothing
     """
     try:
-        # Prepare rules for the initial startup
-        if rb_prepare_rules():
-            # Only start when there is no suricata process running by checking for a .pid file
-            if not os.path.exists("/var/run/suricata.pid"):
+        # Only start when there is no suricata process running by checking for a .pid file
+        if not os.path.exists("/var/run/suricata.pid"):
+            # Prepare rules for the initial startup
+            if rb_prepare_rules():
                 cmd = f"suricata -c /config/suricata.yaml --unix-socket -D"
                 logger.debug(f"Invoking Suricata deamon with {cmd=}")
                 suricatad_process = subprocess.run(cmd, capture_output=True, shell=True)
@@ -75,9 +75,9 @@ def rb_start_deamon(logger=default_logger):
                                     break
                     logger.info(f"Suricata deamon started: {suricatad_process}")
             else:
-                logger.warning("Suricata already running")
+                logger.warning("Suricata rule preparation failed")
         else:
-            logger.warning("Suricata rule preparation failed")
+            logger.info("Suricata running")
     except Exception as e:
         set_state(EXITED)
         logger.exception(f"Could not start Suricata deamon: {e}")
