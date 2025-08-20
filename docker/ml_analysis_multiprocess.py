@@ -544,7 +544,7 @@ def flush_results(result_pipe, results, device_statistics, analysis_duration_ms,
         mac_keys = list(device_statistics.keys())
         if index < len(mac_keys):
             mac_bytes = mac_keys[index]
-            mac = ":".join(f"{b:02x}" for b in mac_bytes)
+            mac = ":".join(f"{b:02x}" for b in mac_bytes).upper()
             stats = device_statistics[mac_bytes]
         else:
             continue # Just testing
@@ -573,7 +573,7 @@ def flush_results(result_pipe, results, device_statistics, analysis_duration_ms,
         #logger.debug(f"{score}\n")
 
     for mac, stats in device_statistics.items():
-        mac_str = ":".join(['%02x' % b for b in mac]).lower()
+        mac_str = ":".join(['%02x' % b for b in mac]).upper()
         external_ips = {
             str(ipaddress.ip_address(ip)): country
             for ip, country in stats['external_ips'].items()

@@ -214,7 +214,7 @@ def rb_filter_results(eve_json, duration, logger=default_logger):
                         "number_occurrences": 1, # Start with 1
                         }
                     new_alert = {
-                        "mac": rb_check_mac(entry["ether"]),
+                        "mac": str(rb_check_mac(entry["ether"])).upper(),
                         "suricata": [suricata_alert] 
                         }
                     # Before appending, check if the new alert is already present
