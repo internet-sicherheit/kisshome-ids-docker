@@ -6,6 +6,7 @@ Script to analyze the .pcap files with suricata
 """
 
 import os
+import glob
 import logging
 import json
 import subprocess
@@ -14,13 +15,21 @@ import tempfile
 import schedule
 
 from logging.handlers import TimedRotatingFileHandler
-from states import set_state, EXITED
+from states import set_state, ERROR
 
+LOG_DIR = "/shared/logs"
+LOG_NAME = "rb_analysis.log"
+
+# Ensure that the log directory exist and old files are deleted
+os.makedirs(LOG_DIR, exist_ok=True)
+log_path = os.path.join(LOG_DIR, LOG_NAME)
+for old_log in glob.glob(f"{log_path}.*"):
+    os.remove(old_log)
 # Each log line includes the date and time, the log level, the current function and the message
 formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
 # The log file is the same as the module name plus the suffix ".log"
 # Rotate files each day to max 7 files, oldest will be deleted
-fh = TimedRotatingFileHandler(filename="/shared/rb_analysis.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
+fh = TimedRotatingFileHandler(filename=log_path, when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
 sh = logging.StreamHandler()
 fh.setLevel(logging.DEBUG)  # set the log level for the log file
 fh.setFormatter(formatter)
@@ -79,7 +88,7 @@ def rb_start_deamon(logger=default_logger):
         else:
             logger.info("Suricata running")
     except Exception as e:
-        set_state(EXITED)
+        set_state(ERROR)
         logger.exception(f"Could not start Suricata deamon: {e}")
 
 def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, meta_json, logger=default_logger):
@@ -157,7 +166,7 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, meta_json, logger=default
                     # Write results
                     rb_write_results(rb_result_pipe_path, duration_s)
     except Exception as e:
-        set_state(EXITED)
+        set_state(ERROR)
         logger.exception(f"Could not analyze the pcap with Suricata: {e}")
 
 
@@ -182,7 +191,7 @@ def rb_write_results(rb_result_pipe_path, duration, logger=default_logger):
         with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "w") as log_file:
             log_file.write("")
     except Exception as e:
-        set_state(EXITED)
+        set_state(ERROR)
         logger.exception(f"Could not write the results: {e}")
     logger.info(f"Alerts of {SURICATA_YAML_DIRECTORY}/eve.json written to {rb_result_pipe_path}")
 
@@ -235,7 +244,7 @@ def rb_filter_results(eve_json, duration, logger=default_logger):
                     if not has_alert:
                         alert_dictionary["detections"].append(new_alert)
     except Exception as e:
-        set_state(EXITED)
+        set_state(ERROR)
         logger.exception(f"Could not filter the results: {e}")
     logger.info("Finished filtering alerts from results")
     logger.debug(f"Returning alerts: {alert_dictionary}")
@@ -258,7 +267,7 @@ def rb_check_mac(alert_mac_adresses, logger=default_logger):
                     logger.debug("Finished checking mac")
                     return meta_key.lower()
     except Exception as e:
-        set_state(EXITED)
+        set_state(ERROR)
         logger.exception(f"Could not check mac: {e}")
 
 
@@ -288,7 +297,7 @@ def rb_prepare_rules(logger=default_logger):
             logger.info(f"Preparing rules done: {preparing_process}")
             return True
     except Exception as e:
-        set_state(EXITED)
+        set_state(ERROR)
         logger.exception(f"Could not prepare rules: {e}")
 
 
@@ -311,7 +320,7 @@ def rb_count_rules(logger=default_logger):
             logger.info(f"Counting rules done: {counting_process}")
             return int(counting_process.stdout)
     except Exception as e:
-        set_state(EXITED)
+        set_state(ERROR)
         logger.exception(f"Could not count rules: {e}")
 
 
@@ -347,7 +356,7 @@ def rb_update_rules(logger=default_logger):
             else:
                 logger.warning("Suricata rule preparation failed")
     except Exception as e:
-        set_state(EXITED)
+        set_state(ERROR)
         logger.exception(f"Could not update Suricata rules: {e}")
 
 

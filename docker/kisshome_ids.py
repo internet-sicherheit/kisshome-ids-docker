@@ -5,6 +5,7 @@
 Class for the Kisshome IDS
 """
 
+import glob
 import logging
 
 from logging.handlers import TimedRotatingFileHandler
@@ -13,13 +14,21 @@ from setup import *
 from rb_analysis import *
 from ml_analysis_multiprocess import *
 from aggregator import *
-from states import set_state, STARTED, EXITED
+from states import set_state, STARTED, ERROR
 
+LOG_DIR = "/shared/logs"
+LOG_NAME = "kisshome_ids.log"
+
+# Ensure that the log directory exist and old files are deleted
+os.makedirs(LOG_DIR, exist_ok=True)
+log_path = os.path.join(LOG_DIR, LOG_NAME)
+for old_log in glob.glob(f"{log_path}.*"):
+    os.remove(old_log)
 # Each log line includes the date and time, the log level, the current function and the message
 formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
 # The log file is the same as the module name plus the suffix ".log"
 # Rotate files each day to max 7 files, oldest will be deleted
-fh = TimedRotatingFileHandler(filename="/shared/kisshome_ids.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
+fh = TimedRotatingFileHandler(filename=log_path, when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
 sh = logging.StreamHandler()
 fh.setLevel(logging.DEBUG)  # set the log level for the log file
 fh.setFormatter(formatter)
@@ -130,7 +139,7 @@ class KisshomeIDS:
             self.logger.info("Analysis configured")
         except Exception as e:
             self.logger.exception(e)
-            set_state(EXITED)
+            set_state(ERROR)
 
     def configure_aggregation(self):
         """
@@ -146,7 +155,7 @@ class KisshomeIDS:
             self.logger.info("Aggregation configured")
         except Exception as e:
             self.logger.exception(e)
-            set_state(EXITED)
+            set_state(ERROR)
 
     def start_analysis(self):
         """
@@ -163,7 +172,7 @@ class KisshomeIDS:
             self.logger.info("Analysis started")
         except Exception as e:
             self.logger.exception(e)
-            set_state(EXITED)
+            set_state(ERROR)
 
     def start_aggregation(self):
         """
@@ -180,7 +189,7 @@ class KisshomeIDS:
             self.logger.info("Aggregation started")
         except Exception as e:
             self.logger.exception(e)
-            set_state(EXITED)
+            set_state(ERROR)
 
     def stop_analysis(self):
         """
@@ -201,7 +210,7 @@ class KisshomeIDS:
             self.logger.info("Analysis stopped")
         except Exception as e:
             self.logger.exception(e)
-            set_state(EXITED)
+            set_state(ERROR)
                 
     def stop_aggregation(self):
         """
@@ -222,4 +231,4 @@ class KisshomeIDS:
             self.logger.info("Aggregation stopped")
         except Exception as e:
             self.logger.exception(e)
-            set_state(EXITED)
+            set_state(ERROR)

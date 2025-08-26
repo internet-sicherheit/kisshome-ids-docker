@@ -8,20 +8,29 @@ Script to aggregate the data and send it back to the adapter
 import logging
 import requests
 import os
+import glob
 import json
 import random
 
 from logging.handlers import TimedRotatingFileHandler
-from states import get_state, set_state, ANALYZING, RUNNING, EXITED
+from states import get_state, set_state, ANALYZING, RUNNING, ERROR
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from ast import literal_eval
 
+LOG_DIR = "/shared/logs"
+LOG_NAME = "aggregator.log"
+
+# Ensure that the log directory exist and old files are deleted
+os.makedirs(LOG_DIR, exist_ok=True)
+log_path = os.path.join(LOG_DIR, LOG_NAME)
+for old_log in glob.glob(f"{log_path}.*"):
+    os.remove(old_log)
 # Each log line includes the date and time, the log level, the current function and the message
 formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
 # The log file is the same as the module name plus the suffix ".log"
 # Rotate files each day to max 7 files, oldest will be deleted
-fh = TimedRotatingFileHandler(filename="/shared/aggregator.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
+fh = TimedRotatingFileHandler(filename=log_path, when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
 sh = logging.StreamHandler()
 fh.setLevel(logging.DEBUG)  # set the log level for the log file
 fh.setFormatter(formatter)
@@ -57,7 +66,7 @@ def send_results(results, callback_url, logger=default_logger):
         resp.raise_for_status()
     except Exception as e:
         logger.exception(e)
-        set_state(EXITED)
+        set_state(ERROR)
         raise
     logger.debug(f"Send {results=} to {callback_url=}")
 
@@ -270,7 +279,7 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=de
                 send_results(results, callback_url)
             except Exception as e:
                 logger.exception(e)
-                set_state(EXITED)
+                set_state(ERROR)
             if get_state() == ANALYZING:
                 # Set new state since analysis is done
                 set_state(RUNNING)

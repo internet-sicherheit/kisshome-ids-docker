@@ -6,6 +6,7 @@ Script to start the API
 """
 
 import os
+import glob
 import logging
 import json
 import time
@@ -14,16 +15,23 @@ from logging.handlers import TimedRotatingFileHandler
 from flask import Flask, request
 from flask_restx import Api, Resource, fields, reqparse, inputs
 from werkzeug.datastructures import FileStorage
-from werkzeug.exceptions import InternalServerError
 from threading import Lock
 from kisshome_ids import KisshomeIDS
 from states import *
 
+LOG_DIR = "/shared/logs"
+LOG_NAME = "flask_api.log"
+
+# Ensure that the log directory exist and old files are deleted
+os.makedirs(LOG_DIR, exist_ok=True)
+log_path = os.path.join(LOG_DIR, LOG_NAME)
+for old_log in glob.glob(f"{log_path}.*"):
+    os.remove(old_log)
 # Each log line includes the date and time, the log level, the current function and the message
 formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
 # The log file is the same as the module name plus the suffix ".log"
 # Rotate files each day to max 7 files, oldest will be deleted
-fh = TimedRotatingFileHandler(filename="/shared/flask_api.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
+fh = TimedRotatingFileHandler(filename=log_path, when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
 sh = logging.StreamHandler()
 fh.setLevel(logging.DEBUG)  # set the log level for the log file
 fh.setFormatter(formatter)
@@ -37,7 +45,7 @@ logger.propagate = False
 
 
 # Version
-VERSION = "1.1.9"
+VERSION = "1.2.0"
 
 # For pcap check
 PCAP_MAGIC_NUMBERS = {
@@ -139,7 +147,7 @@ class Status(Resource):
             logger.debug(f"Current status: {message}")
             return {"Result": "Success", "Message": message}, 200
         except Exception as e:
-            set_state(EXITED)
+            set_state(ERROR)
             return {"Result": "Failed", "Message": str(e)}, 500
 
 
@@ -156,7 +164,7 @@ class Configuration(Resource):
     @ns.expect(config_parser)
     def post(self):
         """Set configuration values, like the meta_json file, the callback URL or if training is allowed"""
-        if EXITED in get_state():
+        if ERROR in get_state():
             # IDS has exited, return 503 service unavailable
             return {"Result": "Failed", "Message": f"{ENV_NAME} has exited, state: {get_state()}"}, 503
         if CONFIGURING in get_state():
@@ -201,7 +209,7 @@ class Configuration(Resource):
 
                 return {"Result": "Success", "Message": "Configuration set"}, 200
             except Exception as e:
-                set_state(EXITED)
+                set_state(ERROR)
                 return {"Result": "Failed", "Message": str(e)}, 500
         
 
@@ -219,7 +227,7 @@ class Pcap(Resource):
     @ns.expect(pcap_parser)
     def post(self):
         """Receives pcap data and writes it to the named pipes"""
-        if EXITED in get_state():
+        if ERROR in get_state():
             # IDS has exited, return 503 service unavailable
             return {"Result": "Failed", "Message": f"{ENV_NAME} has exited, state: {get_state()}"}, 503
         if STARTED in get_state():
@@ -276,7 +284,7 @@ class Pcap(Resource):
 
                 return {"Result": "Success", "Message": f"Pcap {pcap_name} received, start {ENV_NAME}"}, 200
             except Exception as e:
-                set_state(EXITED)
+                set_state(ERROR)
                 return {"Result": "Failed", "Message": str(e)}, 500
         
 

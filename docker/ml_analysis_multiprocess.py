@@ -2,6 +2,8 @@
 #!/usr/bin/env python3
 
 import sys
+import os
+import glob
 import time
 import json
 import dpkt
@@ -20,34 +22,36 @@ from zoneinfo import ZoneInfo
 from functools import lru_cache
 from collections import defaultdict, deque
 from multiprocessing import Pool, cpu_count
-from states import set_state, EXITED
+from states import set_state, ERROR
 
 ########################################
 # 0) Set up logging and load our known device MAC addresses
 ########################################
 
 # 
-logger = None
+LOG_DIR = "/shared/logs"
+LOG_NAME = "ml_analysis.log"
 
-def init_logger():
-
-    global logger
-
-    # Each log line includes the date and time, the log level, the current function and the message
-    formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
-    # The log file is the same as the module name plus the suffix ".log"
-    # Rotate files each day to max 7 files, oldest will be deleted
-    fh = TimedRotatingFileHandler(filename="/shared/ml_analysis.log", when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
-    sh = logging.StreamHandler()
-    fh.setLevel(logging.DEBUG)  # set the log level for the log file
-    fh.setFormatter(formatter)
-    sh.setFormatter(formatter)
-    sh.setLevel(logging.INFO)  # set the log level for the console
-    logger = logging.getLogger(__name__)
-    logger.addHandler(fh)
-    logger.addHandler(sh)
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
+# Ensure that the log directory exist and old files are deleted
+os.makedirs(LOG_DIR, exist_ok=True)
+log_path = os.path.join(LOG_DIR, LOG_NAME)
+for old_log in glob.glob(f"{log_path}.*"):
+    os.remove(old_log)
+# Each log line includes the date and time, the log level, the current function and the message
+formatter = logging.Formatter("%(asctime)s %(levelname)-8s %(funcName)-30s %(message)s")
+# The log file is the same as the module name plus the suffix ".log"
+# Rotate files each day to max 7 files, oldest will be deleted
+fh = TimedRotatingFileHandler(filename=log_path, when='D', interval=1, backupCount=7, encoding='utf-8', delay=False)
+sh = logging.StreamHandler()
+fh.setLevel(logging.DEBUG)  # set the log level for the log file
+fh.setFormatter(formatter)
+sh.setFormatter(formatter)
+sh.setLevel(logging.INFO)  # set the log level for the console
+logger = logging.getLogger(__name__)
+logger.addHandler(fh)
+logger.addHandler(sh)
+logger.setLevel(logging.INFO)
+logger.propagate = False
 
 KNOWN_DEVICES_JSON_FILE = None
 
@@ -64,12 +68,12 @@ def load_known_device_json():
             known_macs = {bytes.fromhex(mac.replace(":", "")) for mac in known_devices_data.keys() }
             
     except FileNotFoundError:
-        set_state(EXITED)
+        set_state(ERROR)
         logger.info("WARNING: meta.json not found. Direction detection won't work.")
         known_macs = set()
 
     except Exception as e:
-        set_state(EXITED)
+        set_state(ERROR)
         logger.info(f"An unexpected error occurred: {str(e)}")
         sys.exit()
 
@@ -120,7 +124,7 @@ def load_asn_recognition():
 
 def setup():
 
-    init_logger()
+    #init_logger() Don't, because it would set uplogging every time. Use import level logging instead
     load_known_device_json()
     load_country_recognition()
     load_asn_recognition()
@@ -166,7 +170,7 @@ def get_country(ip_int):
             return default_country_value 
     
     except Exception as e:
-        set_state(EXITED)
+        set_state(ERROR)
         logger.exception(f"{idx=} {ip_int=}")
         raise
 
@@ -198,7 +202,7 @@ def get_asn(ip_int):
             return default_asn_value
     
     except Exception as e:
-        set_state(EXITED)
+        set_state(ERROR)
         logger.exception(f"{idx=} {ip_int=}")
         raise
 
@@ -500,7 +504,7 @@ def process_packets(pool, pcap):
         return user_device_statistics, all_results, packet_count, pcap_size
 
     except Exception as e:
-        set_state(EXITED)
+        set_state(ERROR)
         traceback.print_exc()
         logger.exception(f"An unexpected error occurred: {str(e)}")
         raise
@@ -634,16 +638,16 @@ def start_analysis(pool, pcap_pipe, result_pipe):
 
             except dpkt.NeedData:
                 # Means dpkt tried to parse data but it didn't exist or was incomplete
-                set_state(EXITED)
+                set_state(ERROR)
                 logger.exception(f"NeedData error:  => Got empty or truncated pcap.")
 
             except dpkt.UnpackError as e:
                 # If the pcap header is corrupt or there's some other parse error
-                set_state(EXITED)
+                set_state(ERROR)
                 logger.exception("Pcap parse error - invalid or corrupted pcap")
 
             except Exception as e:
-                set_state(EXITED)
+                set_state(ERROR)
                 logger.exception(f"Unknown error parsing pcap: {e}")
             
 # if __name__ == "__main__":
@@ -676,7 +680,7 @@ def ml_analyze(pcap_pipe, result_pipe, meta_json, allow_training):
 
     # Make sure that processes are stopped even through Ctrl + C or otherwise
     except Exception as e:
-        set_state(EXITED)
+        set_state(ERROR)
         logger.exception("Unknown error")
 
         pool.close()

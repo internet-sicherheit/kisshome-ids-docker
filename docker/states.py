@@ -20,7 +20,7 @@ STARTED = "Started"
 RUNNING = "Running"
 CONFIGURING = "Configuring"
 ANALYZING = "Analyzing"
-EXITED = "Exited"
+ERROR = "Error"
 
 
 def get_state():
