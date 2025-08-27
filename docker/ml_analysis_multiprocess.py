@@ -562,10 +562,12 @@ def flush_results(result_pipe, results, device_statistics, analysis_duration_ms,
         test_dice = random.randint(0, 1)
         if test_dice == 0:
             progress = random.randint(0, 99)
+            description = "Training device"
         else:
             progress = 100 # Has done training
+            description = "Device training completed"
 
-        training[mac] = {"progress": progress, "description": "Training"} # TODO, structure equal to meta.json
+        training[mac] = {"progress": progress, "description": description} # TODO, structure equal to meta.json
         
         # Test detections else
         test_occurrence = random.randint(1, 100) # TODO: Showcase
