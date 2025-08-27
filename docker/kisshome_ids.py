@@ -58,8 +58,18 @@ class KisshomeIDS:
         self.allow_training = False
         self.callback_url = ""
 
-        # Set path for the meta.json
+        # Set path and dir for the .json files
         self.meta_json = os.path.join("/config", "meta.json")
+        if not os.path.exists(self.meta_json):
+            os.makedirs(os.path.dirname(self.meta_json), exist_ok=True) # Should exist, but be safe
+            with open(self.meta_json, "w") as meta_file:
+                json.dump({}, meta_file)
+        
+        self.training_json = os.path.join("/shared/ml", "training_progress.json")
+        if not os.path.exists(self.training_json):
+            os.makedirs(os.path.dirname(self.training_json), exist_ok=True) # Can exist, but be safe
+            with open(self.training_json, "w") as training_file:
+                json.dump({}, training_file)
 
         # Create and set all pipe paths
         self.rb_pcap_pipe, self.ml_pcap_pipe = set_pcap_pipes()
@@ -133,7 +143,7 @@ class KisshomeIDS:
             rb_process = Process(target=rb_analyze, name="rb_process", args=(self.rb_pcap_pipe, self.rb_result_pipe, self.meta_json))
             self.analysis_processes.append(rb_process)
 
-            ml_process = Process(target=ml_analyze, name="ml_process", args=(self.ml_pcap_pipe, self.ml_result_pipe, self.meta_json, self.allow_training))
+            ml_process = Process(target=ml_analyze, name="ml_process", args=(self.ml_pcap_pipe, self.ml_result_pipe, self.meta_json, self.allow_training, self.training_json))
             self.analysis_processes.append(ml_process)
 
             self.logger.info("Analysis configured")

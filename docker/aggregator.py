@@ -112,17 +112,17 @@ def aggregate_pipes(rb_pipe_dict, ml_pipe_dict, logger=default_logger):
         if current_mac in ml_macs:
             detection["ml"] = ml_pipe_dict["detections"][ml_macs.index(current_mac)]["ml"]
             # Add random score (TUHH)
-            if "Warning" in detection["ml"]["type"]:
+            if "Alert" in detection["ml"]["type"]:
                 detection["ml"]["score"] = round(random.uniform(90, 100), 2)
             if "Normal" in detection["ml"]["type"]:
                 detection["ml"]["score"] = round(random.uniform(0, 10), 2)
         else:
             new_ml_detection = {
-                "type": "Normal", 
-                "description": "0 Anomalies detected",
-                "first_occurrence": datetime.now(ZoneInfo("Europe/Berlin")).isoformat(),
+                "type": "Normal", # Maybe open training_progress.json to determine if its an old mac or a device in training?
+                "description": "",
+                "first_occurrence": "",
                 "number_occurrences": 0,
-                "score": round(random.uniform(0, 10), 2)
+                "score": 0
                 } 
             detection["ml"] = new_ml_detection
 

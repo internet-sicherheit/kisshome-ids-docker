@@ -519,6 +519,8 @@ def process_packets(pool, pcap):
 
 #RESULT_FILE = "/app/ml_results.txt"
 
+TRAINING_JSON_FILE = None
+
 def flush_results(result_pipe, results, device_statistics, analysis_duration_ms, packet_count, pcap_size):
     """
     Overwrite ml_results.txt with new results (one line per score).
@@ -529,6 +531,8 @@ def flush_results(result_pipe, results, device_statistics, analysis_duration_ms,
     # TODO: TEST!!!
 
     detections = []
+    # test training
+    training = {}
 
     index = 0
     for score in results:
@@ -545,36 +549,56 @@ def flush_results(result_pipe, results, device_statistics, analysis_duration_ms,
         #
         # ^: No alerts for ml
         #
+
+        # test random macs
         mac_keys = list(device_statistics.keys())
         if index < len(mac_keys):
             mac_bytes = mac_keys[index]
             mac = ":".join(f"{b:02x}" for b in mac_bytes).upper()
-            stats = device_statistics[mac_bytes]
         else:
             continue # Just testing
 
+        # Test training for mac
+        test_dice = random.randint(0, 1)
+        if test_dice == 0:
+            progress = random.randint(0, 99)
+        else:
+            progress = 100 # Has done training
+
+        training[mac] = {"progress": progress, "description": "Training"} # TODO, structure equal to meta.json
+        
+        # Test detections else
         test_occurrence = random.randint(1, 100) # TODO: Showcase
 
         test_threshold = 0.5
 
-        if score > test_threshold:
-            alert = {
-                "type": "Alert", 
-                "description": f"{test_occurrence} Anomalies detected",
-                "first_occurrence": str(datetime.now(ZoneInfo("Europe/Berlin")).isoformat()),
-                "number_occurrences": test_occurrence # Random
-            }
-            detections.append({"mac": mac, "ml": alert})
-        elif score <= test_threshold:
-            normal = {
-                "type": "Normal", 
-                "description": f"{test_occurrence} Anomalies detected", 
-                "first_occurrence": str(datetime.now(ZoneInfo("Europe/Berlin")).isoformat()),
-                "number_occurrences": test_occurrence # Random
-            }
-            detections.append({"mac": mac, "ml": normal})
+        if progress == 100: # Only for trained devices
+
+            if score > test_threshold:
+                alert = {
+                    "type": "Alert", 
+                    "description": f"{test_occurrence} Anomalies detected",
+                    "first_occurrence": str(datetime.now(ZoneInfo("Europe/Berlin")).isoformat()),
+                    "number_occurrences": test_occurrence # Random
+                }
+                detections.append({"mac": mac, "ml": alert})
+            elif score <= test_threshold:
+                normal = {
+                    "type": "Normal", 
+                    "description": f"{test_occurrence} Anomalies detected", 
+                    "first_occurrence": str(datetime.now(ZoneInfo("Europe/Berlin")).isoformat()),
+                    "number_occurrences": test_occurrence # Random
+                }
+                detections.append({"mac": mac, "ml": normal})
         index += 1
         #logger.debug(f"{score}\n")
+
+    # test: Update training
+    with open(TRAINING_JSON_FILE, "w") as test_training_file:
+        if os.path.exists(TRAINING_JSON_FILE):
+            # Flush content if it exist
+            test_training_file.write("")
+        json.dump(training, test_training_file)
 
     for mac, stats in device_statistics.items():
         mac_str = ":".join(['%02x' % b for b in mac]).upper()
@@ -651,11 +675,17 @@ def start_analysis(pool, pcap_pipe, result_pipe):
                 logger.exception(f"Unknown error parsing pcap: {e}")
             
 # if __name__ == "__main__":
-def ml_analyze(pcap_pipe, result_pipe, meta_json, allow_training):
+def ml_analyze(pcap_pipe, result_pipe, meta_json, allow_training, training_json):
     # Set up global meta.json path
     global KNOWN_DEVICES_JSON_FILE
     if not KNOWN_DEVICES_JSON_FILE:
         KNOWN_DEVICES_JSON_FILE = meta_json
+
+    # Set up global meta.json path
+    global TRAINING_JSON_FILE
+    if not TRAINING_JSON_FILE:
+        TRAINING_JSON_FILE = training_json
+
 
     # Do setup to init every component
     setup()

@@ -45,7 +45,7 @@ logger.propagate = False
 
 
 # Version
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 
 # For pcap check
 PCAP_MAGIC_NUMBERS = {
@@ -98,22 +98,23 @@ ns = api.namespace("", description=f"{ENV_NAME} operations")
 # Models for JSON like requests or responses
 status_configuration_model = ns.model("Status configuration",
     {
-        "Callback url": fields.String(required=True, description="The current callback URL of the IDS"),
-        "Allow training": fields.Boolean(required=True, description="The current value for allowing training of the IDS"),
-        "Meta json": fields.String(required=True, description="The current meta.json of the IDS")
+        "callback_url": fields.String(required=True, description="The current callback URL of the IDS"),
+        "allow_training": fields.Boolean(required=True, description="The current value for allowing training of the IDS"),
+        "meta_json": fields.String(required=True, description="The current meta.json of the IDS")
     }
 )
 status_message_model = ns.model("Status message",
     {
-        "Version": fields.String(required=True, description="The version of the IDS"),
-        "Status": fields.String(required=True, description="The status of the IDS"),
-        "Configuration": fields.Nested(status_configuration_model, required=True, description="The current configuration of the IDS")
+        "version": fields.String(required=True, description="The version of the IDS"),
+        "status": fields.String(required=True, description="The status of the IDS"),
+        "training": fields.String(required=True, description="The current training_progress.json of the IDS"),
+        "configuration": fields.Nested(status_configuration_model, required=True, description="The current configuration")
     }
 )
 status_model = ns.model("Status",
     {
-        "Result": fields.String(required=True, description="Success/Failed"),
-        "Message": fields.Nested(status_message_model, required=True, description="The status message. Possible states: Started/Running/Configuring/Analyzing/Exited")
+        "result": fields.String(required=True, description="Success/Failed"),
+        "message": fields.Nested(status_message_model, required=True, description="The status message. Possible states: Started/Running/Configuring/Analyzing/Exited")
     }
 )
 # Parser otherwise
@@ -135,20 +136,26 @@ class Status(Resource):
     def get(self):
         """Returns the status of our environment"""
         try:
-            # Load meta_json if it exists 
+            # Load meta.json if it exists 
             meta_json = {}
             if os.path.exists(ids.meta_json):
                 with open(ids.meta_json, "r") as meta_file:
                     meta_json = json.load(meta_file)
+            # Load training_progress.json if it exists 
+            training_json = {}
+            if os.path.exists(ids.training_json):
+                with open(ids.training_json, "r") as training_file:
+                    training_json = json.load(training_file)
             # Return json
-            message = {"Version": VERSION,
-                       "Status": get_state(),
-                       "Configuration": {"Callback url": ids.callback_url, "Allow training": ids.allow_training, "Meta json": meta_json}}
+            message = {"version": VERSION,
+                       "status": get_state(),
+                       "training": training_json,
+                       "configuration": {"callback_url": ids.callback_url, "allow_training": ids.allow_training, "meta_json": meta_json}}
             logger.debug(f"Current status: {message}")
-            return {"Result": "Success", "Message": message}, 200
+            return {"result": "Success", "message": message}, 200
         except Exception as e:
             set_state(ERROR)
-            return {"Result": "Failed", "Message": str(e)}, 500
+            return {"result": "Failed", "message": str(e)}, 500
 
 
 @ns.route("/configure")
@@ -166,10 +173,10 @@ class Configuration(Resource):
         """Set configuration values, like the meta_json file, the callback URL or if training is allowed"""
         if ERROR in get_state():
             # IDS has exited, return 503 service unavailable
-            return {"Result": "Failed", "Message": f"{ENV_NAME} has exited, state: {get_state()}"}, 503
+            return {"result": "Failed", "message": f"{ENV_NAME} has exited, state: {get_state()}"}, 503
         if CONFIGURING in get_state():
             # IDS is configuring, return 429 too many request
-            return {"Result": "Failed", "Message": f"{ENV_NAME} busy, state: {get_state()}"}, 429
+            return {"result": "Failed", "message": f"{ENV_NAME} busy, state: {get_state()}"}, 429
         if STARTED in get_state() or RUNNING in get_state() or ANALYZING in get_state():
             try:
                 args = config_parser.parse_args()
@@ -190,7 +197,7 @@ class Configuration(Resource):
                 elif "application/json" in request.content_type:
                     meta_data = request.json
                 else:
-                    return {"Result": "Failed", "Message": "Invalid content type"}, 415
+                    return {"result": "Failed", "message": "Invalid content type"}, 415
 
                 # Set state to prevent sending files via /pcap until it is done
                 set_state(CONFIGURING)
@@ -207,10 +214,10 @@ class Configuration(Resource):
 
                 logger.debug(f"New configuration: callback_url={callback_url}, allow_training={allow_training}, meta_json={meta_json}")
 
-                return {"Result": "Success", "Message": "Configuration set"}, 200
+                return {"result": "Success", "message": "Configuration set"}, 200
             except Exception as e:
                 set_state(ERROR)
-                return {"Result": "Failed", "Message": str(e)}, 500
+                return {"result": "Failed", "message": str(e)}, 500
         
 
 @ns.route("/pcap")
@@ -229,13 +236,13 @@ class Pcap(Resource):
         """Receives pcap data and writes it to the named pipes"""
         if ERROR in get_state():
             # IDS has exited, return 503 service unavailable
-            return {"Result": "Failed", "Message": f"{ENV_NAME} has exited, state: {get_state()}"}, 503
+            return {"result": "Failed", "message": f"{ENV_NAME} has exited, state: {get_state()}"}, 503
         if STARTED in get_state():
             # IDS is not configured yet, return 409 conflict
-            return {"Result": "Failed", "Message": f"{ENV_NAME} not configured, state: {get_state()}"}, 409
+            return {"result": "Failed", "message": f"{ENV_NAME} not configured, state: {get_state()}"}, 409
         if ANALYZING in get_state() or CONFIGURING in get_state():
             # IDS is analysing or configuring, return 429 too many request
-            return {"Result": "Failed", "Message": f"{ENV_NAME} busy, state: {get_state()}"}, 429
+            return {"result": "Failed", "message": f"{ENV_NAME} busy, state: {get_state()}"}, 429
         else:
             try:
                 args = pcap_parser.parse_args()
@@ -254,12 +261,12 @@ class Pcap(Resource):
                 elif "application/octet-stream" in request.content_type:
                     pcap_data = request.data
                 else:
-                    return {"Result": "Failed", "Message": "Invalid content type"}, 415
+                    return {"result": "Failed", "message": "Invalid content type"}, 415
 
                 # Check if the first 4 bytes are the magic pcap(ng) bytes
                 magic_bytes = pcap_data[:4]
                 if not (magic_bytes in PCAP_MAGIC_NUMBERS or magic_bytes == PCAPNG_MAGIC_NUMBER):
-                    return {"Result": "Failed", "Message": "Received invalid pcap data"}, 400
+                    return {"result": "Failed", "message": "Received invalid pcap data"}, 400
                 
                 # Set new state to prevent other calls on /pcap
                 set_state(ANALYZING)
@@ -282,10 +289,10 @@ class Pcap(Resource):
 
                         logger.debug(f"Pipes written with {len(pcap_data)} bytes from {pcap_name=}")
 
-                return {"Result": "Success", "Message": f"Pcap {pcap_name} received, start {ENV_NAME}"}, 200
+                return {"result": "Success", "message": f"Pcap {pcap_name} received, start {ENV_NAME}"}, 200
             except Exception as e:
                 set_state(ERROR)
-                return {"Result": "Failed", "Message": str(e)}, 500
+                return {"result": "Failed", "message": str(e)}, 500
         
 
 #if __name__ == '__main__':
