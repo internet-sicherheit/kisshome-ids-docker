@@ -60,7 +60,7 @@ PCAP_MAGIC_NUMBERS = {
 # For pcapng check
 PCAPNG_MAGIC_NUMBER = b'\x0a\x0d\x0d\x0a'  # Bi-endian, pcapng (standard)
 
-# Initialize Lock for fifo pipes
+# Initialize Locks
 pipe_lock = Lock()
 
 # Initialize app and make it RESTful
@@ -79,15 +79,7 @@ def configure_app(flask_app):
 configure_app(app)
 
 
-ids = None
-
-
-# Make sure the ids is run as a singleton
-@app.before_request
-def setup_ids():
-    global ids
-    if not ids:
-        ids = KisshomeIDS()
+ids = KisshomeIDS()
 
 
 api = Api(app, version=VERSION, title=f'{ENV_NAME} API',
