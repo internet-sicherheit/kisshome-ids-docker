@@ -45,7 +45,7 @@ logger.propagate = False
 
 
 # Version
-VERSION = "1.2.1"
+VERSION = "1.2.2"
 
 # For pcap check
 PCAP_MAGIC_NUMBERS = {
@@ -100,14 +100,14 @@ status_configuration_model = ns.model("Status configuration",
     {
         "callback_url": fields.String(required=True, description="The current callback URL of the IDS"),
         "allow_training": fields.Boolean(required=True, description="The current value for allowing training of the IDS"),
-        "meta_json": fields.String(required=True, description="The current meta.json of the IDS")
+        "meta_json": fields.Raw(required=True, description="The current meta.json of the IDS") # Known
     }
 )
 status_message_model = ns.model("Status message",
     {
         "version": fields.String(required=True, description="The version of the IDS"),
         "status": fields.String(required=True, description="The status of the IDS"),
-        "training": fields.String(required=True, description="The current training_progress.json of the IDS"),
+        "training": fields.Raw(required=True, description="The training with progress and description for each device"), # Has dynamic mac keys
         "configuration": fields.Nested(status_configuration_model, required=True, description="The current configuration")
     }
 )
