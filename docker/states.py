@@ -14,7 +14,7 @@ ENV_NAME = "KISSHOME IDS"
 # State file saving the current state
 STATE_FILE = "/config/state.json" 
 # Lock the file access
-LOCK = FileLock()
+LOCK = FileLock(f"{STATE_FILE}.lock")
 # Define the states of our environment
 STARTED = "Started"
 RUNNING = "Running"
