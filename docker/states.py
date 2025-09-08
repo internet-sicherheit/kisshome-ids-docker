@@ -7,14 +7,14 @@ Script to define all possible states of our environment, the Kisshome IDS system
 
 import json
 
-from threading import Lock
+from filelock import FileLock
 
 # Define the name of our environment
 ENV_NAME = "KISSHOME IDS"
 # State file saving the current state
 STATE_FILE = "/config/state.json" 
 # Lock the file access
-LOCK = Lock()
+LOCK = FileLock()
 # Define the states of our environment
 STARTED = "Started"
 RUNNING = "Running"

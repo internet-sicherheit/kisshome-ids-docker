@@ -112,10 +112,11 @@ def aggregate_pipes(rb_pipe_dict, ml_pipe_dict, logger=default_logger):
         if current_mac in ml_macs:
             detection["ml"] = ml_pipe_dict["detections"][ml_macs.index(current_mac)]["ml"]
             # Add random score (TUHH)
+            # random.random(): [0.0, 1.0)
             if "Alert" in detection["ml"]["type"]:
-                detection["ml"]["score"] = round(random.uniform(90, 100), 2)
+                detection["ml"]["score"] = round(90 + random.random() * 10, 2) # [90.0, 100.0)
             if "Normal" in detection["ml"]["type"]:
-                detection["ml"]["score"] = round(random.uniform(0, 10), 2)
+                detection["ml"]["score"] = round(random.random() * 10, 2) # [0.0, 10.0)
         else:
             new_ml_detection = {
                 "type": "Normal", # Maybe open training_progress.json to determine if its an old mac or a device in training?
@@ -277,9 +278,9 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=de
                 data = aggregate_pipes(dict(literal_eval(rb_pipe.read().strip())), dict(literal_eval(ml_pipe.read().strip())))
                 results = {**info, **data}
                 send_results(results, callback_url)
+                if get_state() == ANALYZING:
+                    # Set new state since analysis is done
+                    set_state(RUNNING)
             except Exception as e:
                 logger.exception(e)
                 set_state(ERROR)
-            if get_state() == ANALYZING:
-                # Set new state since analysis is done
-                set_state(RUNNING)

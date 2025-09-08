@@ -67,7 +67,7 @@ def rb_start_deamon(logger=default_logger):
                 suricatad_process = subprocess.run(cmd, capture_output=True, shell=True)
                 if suricatad_process.returncode != 0:
                     # Something went wrong
-                    logger.warning(f"Suricata deamon process had a non zero exit code: {suricatad_process}")
+                    logger.error(f"Suricata deamon process had a non zero exit code: {suricatad_process}")
                     raise Exception(suricatad_process) 
                 else:
                     is_ready = False
@@ -86,7 +86,7 @@ def rb_start_deamon(logger=default_logger):
             else:
                 logger.warning("Suricata rule preparation failed")
         else:
-            logger.info("Suricata running")
+            logger.info("Suricata already running")
     except Exception as e:
         set_state(ERROR)
         logger.exception(f"Could not start Suricata deamon: {e}")
@@ -130,7 +130,7 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, meta_json, logger=default
                 suricatasc_process = subprocess.run(cmd, capture_output=True, shell=True)
                 if suricatasc_process.returncode != 0:
                     # Something went wrong
-                    logger.warning(f"Suricatasc process had a non zero exit code: {suricatasc_process}") # TODO: Do we want to raise manually?
+                    logger.error(f"Suricatasc process had a non zero exit code: {suricatasc_process}")
                     # Unlink tempfile (delete)
                     if temp_pcap:
                         os.unlink(temp_pcap)
@@ -144,7 +144,7 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, meta_json, logger=default
                         waiting_process = subprocess.run(cmd, capture_output=True, shell=True)
                         if waiting_process.returncode != 0:
                             # Something went wrong
-                            logger.warning(f"Suricatasc waiting process had a non zero exit code: {waiting_process}") # TODO: Do we want to raise manually?
+                            logger.error(f"Suricatasc waiting process had a non zero exit code: {waiting_process}")
                             # Unlink tempfile (delete)
                             if temp_pcap:
                                 os.unlink(temp_pcap)
@@ -337,9 +337,8 @@ def rb_update_rules(logger=default_logger):
         logger.debug(f"Invoking Suricata rule update with {cmd=}")
         update_process = subprocess.run(cmd, capture_output=True, shell=True)
         if update_process.returncode != 0:
-            # Something went wrong
+            # Something went wrong, but don't raise manually
             logger.warning(f"Suricata update process had a non zero exit code: {update_process}")
-            raise Exception(update_process) 
         else:
             # Then prepare newly fetched rules for the deamon if preparation was successful
             if rb_prepare_rules():
@@ -348,9 +347,8 @@ def rb_update_rules(logger=default_logger):
                 logger.debug(f"Invoking Suricatasc rule reload with {cmd=}")
                 suricatasc_process = subprocess.run(cmd, capture_output=True, shell=True)
                 if suricatasc_process.returncode != 0:
-                    # Something went wrong
+                    # Something went wrong, but don't raise manually
                     logger.warning(f"Suricatasc rule reload process had a non zero exit code: {suricatasc_process}")
-                    raise Exception(suricatasc_process) 
                 else:
                     logger.info(f"Suricata rules updated: {update_process} and {suricatasc_process}")
             else:

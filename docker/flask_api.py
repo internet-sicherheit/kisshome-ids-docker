@@ -45,7 +45,7 @@ logger.propagate = False
 
 
 # Version
-VERSION = "1.2.2"
+VERSION = "1.2.3"
 
 # For pcap check
 PCAP_MAGIC_NUMBERS = {
