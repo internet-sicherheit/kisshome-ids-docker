@@ -102,6 +102,7 @@ class KisshomeIDS:
         self.stop_aggregation()
 
         self.pcap_name = pcap_name
+        self.logger.info("Update pcap name for aggregation")
 
         # Recreate aggregation process
         self.configure_aggregation()
@@ -159,7 +160,7 @@ class KisshomeIDS:
         """
         try:
             # Create new process for the aggregation
-            aggregate_process = Process(target=aggregate, name="aggregate_process", args=(self.rb_result_pipe, self.ml_result_pipe, self.callback_url, self.pcap_name))
+            aggregate_process = Process(target=aggregate, name="aggregate_process", args=(self.rb_result_pipe, self.ml_result_pipe, self.callback_url, self.allow_training, self.pcap_name))
             self.aggregation_processes.append(aggregate_process)
 
             self.logger.info("Aggregation configured")

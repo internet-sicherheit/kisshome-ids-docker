@@ -9,11 +9,13 @@ import logging
 import requests
 import os
 import glob
+import setproctitle
 import json
 import random
 
 from logging.handlers import TimedRotatingFileHandler
 from states import get_state, set_state, ANALYZING, RUNNING, ERROR
+from monitor import get_cpuinfo, get_gpuinfo, stop_monitoring, SYSSTAT_DIRECTORY
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from ast import literal_eval
@@ -46,6 +48,84 @@ default_logger.propagate = False
 # Anomaly strings
 ANOMALY = "Anomalies detected"
 NO_ANOMALY = "No anomalies detected"
+# The file with the training information
+TRAINING_JSON = os.path.join("/shared/ml", "training_progress.json")
+# The meta.json file path
+META_JSON = os.path.join("/config", "meta.json")
+# Use the default log directory provided by the .yaml file
+SURICATA_YAML_DIRECTORY = "/var/log/suricata"
+    
+
+def collect_meta():
+    """
+    Collect informations about the environment
+    
+    @return: dict with meta informations
+    """
+    # Create dictionary to return
+    meta_informations = {"meta": {}}
+
+    # 1: Get suricata stats as strings in list
+    
+    suricata_log = {"suricata_log": []}
+    with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "r") as log_file:
+        suricata_log["suricata_log"] = log_file.readlines()
+    # Flush afterward
+    with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "w") as log_file:
+        log_file.write("")
+
+    suricata_stat = {"suricata_stat": []}
+    with open(os.path.join(SURICATA_YAML_DIRECTORY, "stats.log"), "r") as stat_file:
+        suricata_stat["suricata_stat"] = stat_file.readlines()
+    # Flush afterward
+    with open(os.path.join(SURICATA_YAML_DIRECTORY, "stats.log"), "w") as stat_file:
+        stat_file.write("")
+
+    # 2: Get hardware stats as strings
+
+    cpu = {"cpu": [str(get_cpuinfo()).strip()]}
+    gpu = {"gpu": [str(get_gpuinfo()).strip()]}
+
+    # 3: Get monitor data as json
+
+    iostat = {"iostat": []}
+    with open(os.path.join(SYSSTAT_DIRECTORY, "iostat.json"), "r") as iostat_file:
+        try:
+            iostat["iostat"] = json.load(iostat_file)
+        except json.JSONDecodeError: # Sometimes it failes 
+            iostat_file.seek(0)
+            lines = iostat_file.readlines()
+            # Add missing lines
+            lines.append("]}]}}")
+            iostat["iostat"] = json.loads("".join(lines))
+
+    pidstat = {"pidstat": []}
+    with open(os.path.join(SYSSTAT_DIRECTORY, "pidstat.json"), "r") as pidstat_file:
+        try:
+            pidstat["pidstat"] = json.load(pidstat_file)
+        except json.JSONDecodeError: # Sometimes it failes 
+            pidstat_file.seek(0)
+            lines = pidstat_file.readlines()
+            # Add missing lines
+            lines.append("]}]}}")
+            pidstat["pidstat"] = json.loads("".join(lines))
+
+    sar = {"sar": {}}
+    with open(os.path.join(SYSSTAT_DIRECTORY, "sar.json"), "r") as sar_file:
+        sar["sar"] = json.load(sar_file)
+    
+    # Flush afterward
+    with open(os.path.join(SYSSTAT_DIRECTORY, "iostat.json"), "w") as iostat_file:
+        iostat_file.write("")
+        # Flush afterward
+    with open(os.path.join(SYSSTAT_DIRECTORY, "pidstat.json"), "w") as pidstat_file:
+        pidstat_file.write("")
+    with open(os.path.join(SYSSTAT_DIRECTORY, "sar.json"), "w") as sar_file:
+        sar_file.write("")
+
+    # Return results
+    meta_informations["meta"] = {**suricata_log, **suricata_stat, **cpu, **gpu, **iostat, **pidstat, **sar}
+    return meta_informations
 
 
 def send_results(results, callback_url, logger=default_logger):
@@ -111,7 +191,7 @@ def aggregate_pipes(rb_pipe_dict, ml_pipe_dict, logger=default_logger):
         # ML second
         if current_mac in ml_macs:
             detection["ml"] = ml_pipe_dict["detections"][ml_macs.index(current_mac)]["ml"]
-            # Add random score (TUHH)
+            # Add random score (TUHH) -> TODO: MOVE TO ADAPTER
             # random.random(): [0.0, 1.0)
             if "Alert" in detection["ml"]["type"]:
                 detection["ml"]["score"] = round(90 + random.random() * 10, 2) # [90.0, 100.0)
@@ -119,7 +199,7 @@ def aggregate_pipes(rb_pipe_dict, ml_pipe_dict, logger=default_logger):
                 detection["ml"]["score"] = round(random.random() * 10, 2) # [0.0, 10.0)
         else:
             new_ml_detection = {
-                "type": "Normal", # Maybe open training_progress.json to determine if its an old mac or a device in training?
+                "type": "Normal",
                 "description": "",
                 "first_occurrence": "",
                 "number_occurrences": 0,
@@ -135,18 +215,23 @@ def aggregate_pipes(rb_pipe_dict, ml_pipe_dict, logger=default_logger):
     return analysis_results
 
 
-def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=default_logger):
+def aggregate(rb_result_pipe, ml_result_pipe, callback_url, allow_training, pcap_name, logger=default_logger):
     """
     Aggregate the data of the rule based and ML based analysis to a result as a json
     
     @param rb_result_pipe: path to the pipe for the rb result content
     @param ml_result_pipe: path to the pipe for the ml result content
     @param callback_url: URL of the adapter to  recieve the results
+    @param allow_training: boolean if the user allows training of devices
     @param pcap_name: the name of the pcap file to process
     @param logger: logger for logging, default default_logger
     @return: nothing
     """
     logger.info("Start aggregation")
+
+    # This process is named after the program
+    setproctitle.setproctitle(__file__)
+
     while True:
         # Blocks until both writer have finished their jobs
         with open(rb_result_pipe, "r") as rb_pipe, open(ml_result_pipe, "r") as ml_pipe:
@@ -270,17 +355,40 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, pcap_name, logger=de
             #
             #
             # Merge to a final result as json
+
+            # In case the timeout is not reached, stop the monitoring
+            stop_monitoring()
+
             try:
                 info = {"file": pcap_name, 
                         "time": datetime.now(ZoneInfo("Europe/Berlin")).isoformat(), 
                         "result": {"status": "success"}
                         }
+                
                 data = aggregate_pipes(dict(literal_eval(rb_pipe.read().strip())), dict(literal_eval(ml_pipe.read().strip())))
-                results = {**info, **data}
+                
+                # Load training_progress.json
+                training = {"training": {}}
+                if os.path.exists(TRAINING_JSON):
+                    with open(TRAINING_JSON, "r") as training_file:
+                        training["training"] = json.load(training_file)
+                
+                config = {"config": {"allow_training": False, "callback_url": "", "meta_json": {}}}
+                config["config"]["allow_training"] = allow_training
+                config["config"]["callback_url"] = callback_url
+                if os.path.exists(META_JSON):
+                    with open(META_JSON, "r") as meta_file:
+                        config["config"]["meta_json"] = json.load(meta_file)
+
+                meta = collect_meta()
+                
+                results = {**info, **data, **training, **config, **meta}
                 send_results(results, callback_url)
+
                 if get_state() == ANALYZING:
                     # Set new state since analysis is done
                     set_state(RUNNING)
+
             except Exception as e:
                 logger.exception(e)
                 set_state(ERROR)

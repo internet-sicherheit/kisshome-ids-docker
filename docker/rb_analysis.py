@@ -7,6 +7,7 @@ Script to analyze the .pcap files with suricata
 
 import os
 import glob
+import setproctitle
 import logging
 import json
 import subprocess
@@ -102,10 +103,14 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, meta_json, logger=default
     @return: nothing
     """
     logger.info(f"Start using suricata to analyze pcap data")
+    # This process is named after the program
+    setproctitle.setproctitle(__file__)
+
     # First update global path to meta.json file
     global META_JSON
     if not META_JSON:
         META_JSON = meta_json
+
     # Use suricata on the provided pcap content
     try:
         # Set the rule update process first so that rules are updated daily using schedule modul
@@ -118,7 +123,6 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, meta_json, logger=default
                 start_time = time.time()
                 # Write the data to a tempfile since suricatasc cannot process streams
                 temp_pcap = None
-                # Delete manually
                 with tempfile.NamedTemporaryFile(delete=False) as pcap_file:
                     pcap_file.write(rb_pcap_pipe.read())
                     temp_pcap = pcap_file.name
@@ -188,8 +192,6 @@ def rb_write_results(rb_result_pipe_path, duration, logger=default_logger):
         # Flush afterward
         with open(os.path.join(SURICATA_YAML_DIRECTORY, "eve.json"), "w") as eve_file:
             eve_file.write("")
-        with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "w") as log_file:
-            log_file.write("")
     except Exception as e:
         set_state(ERROR)
         logger.exception(f"Could not write the results: {e}")

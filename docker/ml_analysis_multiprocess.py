@@ -4,6 +4,7 @@
 import sys
 import os
 import glob
+import setproctitle
 import time
 import json
 import dpkt
@@ -389,6 +390,9 @@ model = None  # Will be set by each worker during init
 
 def init_worker():
 
+    # This worker process is named after the program + worker
+    setproctitle.setproctitle(f"{__file__}-worker")
+
     # Make sure every worker loads tf while the reader process does not
     from tensorflow.keras import Input, layers, Model
     
@@ -678,6 +682,10 @@ def start_analysis(pool, pcap_pipe, result_pipe):
             
 # if __name__ == "__main__":
 def ml_analyze(pcap_pipe, result_pipe, meta_json, allow_training, training_json):
+
+    # This process is named after the program
+    setproctitle.setproctitle(__file__)
+
     # Set up global meta.json path
     global KNOWN_DEVICES_JSON_FILE
     if not KNOWN_DEVICES_JSON_FILE:

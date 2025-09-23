@@ -7,6 +7,7 @@ Script to start the API
 
 import os
 import glob
+import setproctitle
 import logging
 import json
 import time
@@ -18,6 +19,7 @@ from werkzeug.datastructures import FileStorage
 from threading import Lock
 from kisshome_ids import KisshomeIDS
 from states import *
+from monitor import start_monitoring
 
 LOG_DIR = "/shared/logs"
 LOG_NAME = "flask_api.log"
@@ -44,8 +46,11 @@ logger.setLevel(logging.INFO)
 logger.propagate = False
 
 
+# This process is named after the program
+setproctitle.setproctitle(__file__)
+
 # Version
-VERSION = "1.2.3"
+VERSION = "1.2.4"
 
 # For pcap check
 PCAP_MAGIC_NUMBERS = {
@@ -275,6 +280,9 @@ class Pcap(Resource):
                         # We do one write via request.data instead of chunking the data, as analysis does not 
                         # start asynchronously anyway (not possible in dpkt) and therefore save cpu on many chunked writes.
                         # If memory from sent pcap data becomes an issue, we might look at shared memory solutions instead of pipes
+
+                        # Start monitoring for max. 10 seconds
+                        start_monitoring(timeout=10)
 
                         rb_pipe.write(pcap_data)
                         ml_pipe.write(pcap_data)
