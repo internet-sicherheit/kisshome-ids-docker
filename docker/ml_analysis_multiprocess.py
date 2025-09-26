@@ -17,6 +17,7 @@ import bisect
 import ipaddress
 import random
 
+from filelock import FileLock
 from logging.handlers import TimedRotatingFileHandler
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -580,31 +581,35 @@ def flush_results(result_pipe, results, device_statistics, analysis_duration_ms,
 
         if progress == 100: # Only for trained devices
 
+            # No score randomization in aggregator, moved to adapter :)
             if score > test_threshold:
                 alert = {
                     "type": "Alert", 
                     "description": f"{test_occurrence} Anomalies detected",
                     "first_occurrence": str(datetime.now(ZoneInfo("Europe/Berlin")).isoformat()),
-                    "number_occurrences": test_occurrence # Random
+                    "number_occurrences": test_occurrence, # Random
+                    "score": score
                 }
                 detections.append({"mac": mac, "ml": alert})
             elif score <= test_threshold:
                 normal = {
                     "type": "Normal", 
-                    "description": f"{test_occurrence} Anomalies detected", 
-                    "first_occurrence": str(datetime.now(ZoneInfo("Europe/Berlin")).isoformat()),
-                    "number_occurrences": test_occurrence # Random
+                    "description": f"No Anomalies detected", 
+                    "first_occurrence": "",
+                    "number_occurrences": 0, 
+                    "score": score
                 }
                 detections.append({"mac": mac, "ml": normal})
         index += 1
         #logger.debug(f"{score}\n")
 
-    # test: Update training
-    with open(TRAINING_JSON_FILE, "w") as test_training_file:
-        if os.path.exists(TRAINING_JSON_FILE):
-            # Flush content if it exist
-            test_training_file.write("")
-        json.dump(training, test_training_file)
+    # Test: Update training
+    with FileLock(f"{TRAINING_JSON_FILE}.lock"):
+        with open(TRAINING_JSON_FILE, "w") as test_training_file:
+            if os.path.exists(TRAINING_JSON_FILE):
+                # Flush content if it exist
+                test_training_file.write("")
+            json.dump(training, test_training_file)
 
     for mac, stats in device_statistics.items():
         mac_str = ":".join(['%02x' % b for b in mac]).upper()

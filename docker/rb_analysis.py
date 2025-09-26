@@ -46,7 +46,8 @@ default_logger.propagate = False
 # Use the default log directory provided by the .yaml file
 SURICATA_YAML_DIRECTORY = "/var/log/suricata"
 # Socket created by the suricata deamon
-RB_SOCKET = None
+# Also provide the default path
+RB_SOCKET = "/var/run/suricata/suricata-command.socket"
 # Path to meta.json
 META_JSON = None
 
@@ -77,8 +78,10 @@ def rb_start_deamon(logger=default_logger):
                         with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "r") as log_file:
                             for log_line in log_file.readlines():
                                 global RB_SOCKET
-                                if "unix socket" in log_line and not RB_SOCKET:
-                                    RB_SOCKET = str(log_line).split("'")[1] # Parse socket name from line
+                                if "unix socket" in log_line:
+                                    socket = str(log_line).split("'")[1] # Parse socket name from line
+                                    if RB_SOCKET != socket:
+                                        RB_SOCKET = socket
                                     logger.debug(f"Socket created at: {RB_SOCKET}")
                                 if "Engine started" in log_line:
                                     is_ready = True # Deamon has created socket and started engine
@@ -106,7 +109,7 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, meta_json, logger=default
     # This process is named after the program
     setproctitle.setproctitle(__file__)
 
-    # First update global path to meta.json file
+    # First update global path to meta.json file if not set
     global META_JSON
     if not META_JSON:
         META_JSON = meta_json
@@ -335,7 +338,7 @@ def rb_update_rules(logger=default_logger):
     """
     try:
         # First fetch new rules
-        cmd = "suricata-update"
+        cmd = "suricata-update --suricata-conf /config/suricata.yaml"
         logger.debug(f"Invoking Suricata rule update with {cmd=}")
         update_process = subprocess.run(cmd, capture_output=True, shell=True)
         if update_process.returncode != 0:

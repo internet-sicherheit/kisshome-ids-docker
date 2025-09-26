@@ -14,6 +14,8 @@ import time
 
 # Directory to save the monitor data
 SYSSTAT_DIRECTORY = "/stat"
+# Timer to stop monitoring automatically
+TIMER = None
 # Monitoring process lists with tuples <process, fd>
 PROCESSES = []
 
@@ -58,6 +60,7 @@ def start_monitoring(interval=1, timeout=None):
     @return: nothing
     """
     global PROCESSES
+    global TIMER
 
     # Use Popen() for parallel monitoring
     # Also use fd for output handling
@@ -77,7 +80,7 @@ def start_monitoring(interval=1, timeout=None):
         stop_monitoring()
 
     if timeout:
-        threading.Timer(timeout, stop).start()
+        TIMER = threading.Timer(timeout, stop).start()
 
 
 def stop_monitoring():
@@ -87,30 +90,39 @@ def stop_monitoring():
     @return: nothing
     """
     global PROCESSES
+    global TIMER
     
+    # Reset timer
+    TIMER = None
+
     # Use sadf as frontend to the sar 
     sarbin = f"{SYSSTAT_DIRECTORY}/sar"
     sadf_cmd = f"sadf -j {sarbin} -- -bdFqrSuWx -I SUM -n DEV -n EDEV -P ALL > {SYSSTAT_DIRECTORY}/sar.json"
 
     # Cleanup
     for process, fd in PROCESSES:
-        # Stop the entire process with SIGINT
+        # Stop the entire process with SIGINT first
         process.send_signal(signal.SIGINT)
-        # Wait a little 
+        # Wait a little before killing the process
         time.sleep(1)
-        process.wait()
+        try:
+            # Wait max. 3 seconds before kiling the process
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
         # Close the output file handle
         if fd:
             fd.close()
 
     PROCESSES.clear()
 
-    # Parse sar binary to json with sadf
-    sadf_process = subprocess.run(sadf_cmd,shell=True)
-    if sadf_process.returncode != 0:
-        # Something went wrong
-        raise Exception(sadf_process) 
+    if os.path.exists(sarbin):
+        # Parse sar binary to json with sadf
+        sadf_process = subprocess.run(sadf_cmd,shell=True)
+        if sadf_process.returncode != 0:
+            # Something went wrong
+            raise Exception(sadf_process) 
     
-    # Delete sar binary manually
-    if sarbin:
+        # Delete sar binary manually
         os.remove(sarbin)

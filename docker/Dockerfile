@@ -1,6 +1,15 @@
-# Use debian for the docker image from dockerhub for all architecture
-#FROM --platform=$BUILDPLATFORM debian:stable
-FROM debian:stable
+# Use debian for the docker image from dockerhub for all architectures
+#
+# Multistage: First build binaries and copy to real image later
+# Building Suricata causes much overhead, so build latest version of Suricata 7
+# Stage 1 (suricata-builder, use full image)
+FROM debian:stable AS suricata-builder
+
+# Use a temporary location to build suricata binaries
+ARG INSTALL_LOCATION=/fakeroot
+
+# Set the temporary location
+ENV PREFIX=${INSTALL_LOCATION}
 
 # Install apt dependencies
 RUN apt update && \
@@ -24,16 +33,69 @@ RUN apt update && \
     wget \
     make \
     xz-utils \
-    python3 \
-    python3-pip \
+    python3-dev \
+    python3-yaml \
     pciutils \
     rustc \
     cargo \
     && apt clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install python dependencies
+# Define Suricata version
+ARG SURICATA_VERSION=7.0.12
+
+# Download and build with static libraries and without hardware optimization
+RUN wget \
+    https://www.openinfosecfoundation.org/download/suricata-${SURICATA_VERSION}.tar.gz \
+    && tar -xvzf suricata-${SURICATA_VERSION}.tar.gz \
+    && cd suricata-${SURICATA_VERSION} \
+    && ./configure --disable-shared --disable-gccmarch-native --prefix=/usr --sysconfdir=/etc --localstatedir=/var \
+    && make -j$(nproc) \
+    && make install install-conf DESTDIR=${INSTALL_LOCATION} \
+    && cd .. \
+    && rm -rf suricata-${SURICATA_VERSION}*
+
+# Stage 2 (final, use slim)
+FROM debian:stable-slim AS final
+
+# Install apt dependencies
+RUN apt update && \
+    apt install -y \
+    wget \
+    libpcre2-8-0 \
+    libyaml-0-2 \
+    libjansson4 \
+    libmagic1 \
+    libpcap0.8 \
+    libnet1 \
+    libcap-ng0 \
+    liblua5.3-0 \
+    libgeoip1 \
+    libhiredis1.1.0 \
+    python3 \
+    python3-pip \
+    pciutils \
+    && apt clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set sysstat version
+ARG SYSSTAT_VERSION=12.7.8
+
+# Download, build, install, and clean up
+# Cannot move to builder stage because of static file linking inside the sar binary
+# But it is not crucial since only wget needs to be installed for the image version (minimal overhead)
+RUN wget https://github.com/sysstat/sysstat/archive/refs/tags/v${SYSSTAT_VERSION}.tar.gz && \
+    tar -xzf v${SYSSTAT_VERSION}.tar.gz && \
+    cd sysstat-${SYSSTAT_VERSION} && \
+    ./configure --prefix=/usr && \
+    make && \
+    make install && \
+    cd .. && \
+    rm -rf sysstat-${SYSSTAT_VERSION}*
+
+# Install python dependencies for "normal" packages
 RUN pip3 install --break-system-packages \
+    PyYAML \
     setproctitle \
     filelock \
     schedule \
@@ -41,40 +103,26 @@ RUN pip3 install --break-system-packages \
     flask-restx \
     gunicorn \
     dpkt \
-    numpy \
-    tensorflow
+    numpy
 
-# Define Suricata version
-ARG SURICATA_VERSION=7.0.12
+# Install python dependencies for tensorflow
+RUN pip3 install --break-system-packages tensorflow
 
-# Download and build
-RUN wget \
-    https://www.openinfosecfoundation.org/download/suricata-${SURICATA_VERSION}.tar.gz \
-    && tar -xvzf suricata-${SURICATA_VERSION}.tar.gz \
-    && cd suricata-${SURICATA_VERSION} \
-    && ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var \
-    && make -j$(nproc) \
-    && make install-full \
-    && cd .. \
-    && rm -rf suricata-${SURICATA_VERSION}*
+# Install python dependencies for pytorch 
+#RUN pip3 install --break-system-packages torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
-# Set sysstat version
-ARG SYSSTAT_VERSION=12.7.8
-
-# Download, build, install, and clean up
-RUN wget https://github.com/sysstat/sysstat/archive/refs/tags/v${SYSSTAT_VERSION}.tar.gz && \
-    tar -xzf v${SYSSTAT_VERSION}.tar.gz && \
-    cd sysstat-${SYSSTAT_VERSION} && \
-    ./configure && \
-    make && \
-    make install && \
-    cd .. && \
-    rm -rf sysstat-${SYSSTAT_VERSION}*
+# Copy Suricata binaries and support files
+COPY --from=suricata-builder /fakeroot/usr/bin/suricata* /usr/bin/
+COPY --from=suricata-builder /fakeroot/usr/lib/suricata /usr/lib/suricata
+COPY --from=suricata-builder /fakeroot/etc/suricata /etc/suricata
+COPY --from=suricata-builder /fakeroot/var/log/suricata /var/log/suricata
+COPY --from=suricata-builder /fakeroot/var/lib/suricata /var/lib/suricata
+COPY --from=suricata-builder /fakeroot/var/run/suricata /var/run/suricata
 
 # Set up suricata properly
 # Also enable et/open dataset as default and add all relevant rulesets by abuse.ch (currently only URLhaus is maintained)
 #RUN suricata-update && suricata-update enable-source abuse.ch/sslbl-blacklist && suricata-update enable-source abuse.ch/sslbl-c2 && suricata-update enable-source abuse.ch/sslbl-ja3 && suricata-update update-sources
-RUN suricata-update && suricata-update enable-source abuse.ch/urlhaus && suricata-update update-sources
+RUN suricata-update update-sources && suricata-update enable-source abuse.ch/urlhaus && suricata-update --no-test --no-reload
 
 # Copy suricata rules to the default rule path in the yaml
 COPY kisshome.rules /var/lib/suricata/rules/
@@ -90,9 +138,9 @@ WORKDIR /pipe
 WORKDIR /config
 
 # Fourth directory is for the stat collection
-WORKDIR /stat
+WORKDIR /stat,
 
-# Copy suricata yaml file to not the default generated yaml file
+# Copy suricata yaml file to not use the default generated yaml file
 COPY suricata.yaml /config/
 
 # Copy csv files

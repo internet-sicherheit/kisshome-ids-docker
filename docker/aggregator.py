@@ -11,7 +11,6 @@ import os
 import glob
 import setproctitle
 import json
-import random
 
 from logging.handlers import TimedRotatingFileHandler
 from states import get_state, set_state, ANALYZING, RUNNING, ERROR
@@ -56,10 +55,38 @@ META_JSON = os.path.join("/config", "meta.json")
 SURICATA_YAML_DIRECTORY = "/var/log/suricata"
     
 
-def collect_meta():
+def load_json_from_file(monitoring_file_name, logger=default_logger):
+    """
+    Load file content and parse to json format
+
+    @param monitoring_file_name: name of monitoring file to be parsed
+    @param logger: logger for logging, default default_logger
+    @return: dict with the parsed file content, else raw content
+    """
+    result = {monitoring_file_name: {}}
+    monitoring_file = f"{monitoring_file_name}.json"
+    try:
+        with open(os.path.join(SYSSTAT_DIRECTORY, monitoring_file), "r") as stat_file:
+            result[monitoring_file_name] = json.load(stat_file)
+    except json.JSONDecodeError:
+        # Retry with fix caused by an unfinished INTERRUPT
+        with open(os.path.join(SYSSTAT_DIRECTORY, monitoring_file), "r") as stat_file:
+            lines = stat_file.readlines()
+        try:
+            lines.append("]}]}}")
+            result[monitoring_file_name] = json.loads("".join(lines))
+        except json.JSONDecodeError:
+            # Last resort: return raw lines
+            result[monitoring_file_name] = lines
+    logger.debug(f"Loaded json from file {monitoring_file_name}.json")
+    return result
+
+
+def collect_meta(logger=default_logger):
     """
     Collect informations about the environment
     
+    @param logger: logger for logging, default default_logger
     @return: dict with meta informations
     """
     # Create dictionary to return
@@ -88,36 +115,13 @@ def collect_meta():
 
     # 3: Get monitor data as json
 
-    iostat = {"iostat": []}
-    with open(os.path.join(SYSSTAT_DIRECTORY, "iostat.json"), "r") as iostat_file:
-        try:
-            iostat["iostat"] = json.load(iostat_file)
-        except json.JSONDecodeError: # Sometimes it failes 
-            iostat_file.seek(0)
-            lines = iostat_file.readlines()
-            # Add missing lines
-            lines.append("]}]}}")
-            iostat["iostat"] = json.loads("".join(lines))
-
-    pidstat = {"pidstat": []}
-    with open(os.path.join(SYSSTAT_DIRECTORY, "pidstat.json"), "r") as pidstat_file:
-        try:
-            pidstat["pidstat"] = json.load(pidstat_file)
-        except json.JSONDecodeError: # Sometimes it failes 
-            pidstat_file.seek(0)
-            lines = pidstat_file.readlines()
-            # Add missing lines
-            lines.append("]}]}}")
-            pidstat["pidstat"] = json.loads("".join(lines))
-
-    sar = {"sar": {}}
-    with open(os.path.join(SYSSTAT_DIRECTORY, "sar.json"), "r") as sar_file:
-        sar["sar"] = json.load(sar_file)
+    iostat = load_json_from_file("iostat")
+    pidstat = load_json_from_file("pidstat")
+    sar = load_json_from_file("sar")
     
     # Flush afterward
     with open(os.path.join(SYSSTAT_DIRECTORY, "iostat.json"), "w") as iostat_file:
         iostat_file.write("")
-        # Flush afterward
     with open(os.path.join(SYSSTAT_DIRECTORY, "pidstat.json"), "w") as pidstat_file:
         pidstat_file.write("")
     with open(os.path.join(SYSSTAT_DIRECTORY, "sar.json"), "w") as sar_file:
@@ -125,6 +129,7 @@ def collect_meta():
 
     # Return results
     meta_informations["meta"] = {**suricata_log, **suricata_stat, **cpu, **gpu, **iostat, **pidstat, **sar}
+    logger.info(f"Collected meta informations: {meta_informations}")
     return meta_informations
 
 
@@ -133,7 +138,7 @@ def send_results(results, callback_url, logger=default_logger):
     Send results to a given URL
     
     @param results: the results as a json
-    param callback_url: URL of the adapter to  recieve the results
+    @param callback_url: URL of the adapter to  recieve the results
     @param logger: logger for logging, default default_logger
     @return: nothing
     """
@@ -151,12 +156,13 @@ def send_results(results, callback_url, logger=default_logger):
     logger.debug(f"Send {results=} to {callback_url=}")
 
 
-def aggregate_pipes(rb_pipe_dict, ml_pipe_dict, logger=default_logger):
+def aggregate_pipes(rb_pipe_dict, ml_pipe_dict, known_macs, logger=default_logger):
     """
     Aggregate the pipe data and create a new json object
     
     @param rb_pipe_json: pipe with the rb result content as a dict
     @param ml_pipe_json: pipe with the ml result content as a dict
+    @param known_macs: list with all current devices by mac addresses
     @param logger: logger for logging, default default_logger
     @return: analysis results as a dict
     """
@@ -164,15 +170,10 @@ def aggregate_pipes(rb_pipe_dict, ml_pipe_dict, logger=default_logger):
     analysis_results = {"statistics": {}, "detections": []}
 
     # Aggregate the detections first
-    # Get known macs from meta.json
-    known_macs = []
-    with open(os.path.join("/config", "meta.json"), "r") as meta_file:
-        known_macs = json.load(meta_file).keys()
-
     for mac in known_macs:
         analysis_results["detections"].append({"mac": mac})
 
-    # Get keys of 
+    # Get macs from detections as list
     rb_macs = [str(rb_mac["mac"]).lower() for rb_mac in rb_pipe_dict["detections"]]
     ml_macs = [str(ml_mac["mac"]).lower() for ml_mac in ml_pipe_dict["detections"]]
 
@@ -190,13 +191,8 @@ def aggregate_pipes(rb_pipe_dict, ml_pipe_dict, logger=default_logger):
 
         # ML second
         if current_mac in ml_macs:
+            # Random score wil be added in the adapter, report real scores
             detection["ml"] = ml_pipe_dict["detections"][ml_macs.index(current_mac)]["ml"]
-            # Add random score (TUHH) -> TODO: MOVE TO ADAPTER
-            # random.random(): [0.0, 1.0)
-            if "Alert" in detection["ml"]["type"]:
-                detection["ml"]["score"] = round(90 + random.random() * 10, 2) # [90.0, 100.0)
-            if "Normal" in detection["ml"]["type"]:
-                detection["ml"]["score"] = round(random.random() * 10, 2) # [0.0, 10.0)
         else:
             new_ml_detection = {
                 "type": "Normal",
@@ -235,51 +231,7 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, allow_training, pcap
     while True:
         # Blocks until both writer have finished their jobs
         with open(rb_result_pipe, "r") as rb_pipe, open(ml_result_pipe, "r") as ml_pipe:
-            # TODO: Update data var structure
-            #
-            # TODO: First version (Lastenheft)
-            #
-            # Example:
-            # {
-            #     "file": "2020-09-23T14:00:00.pcap",
-            #     "result": {
-            #         "status": "success",
-            #         "error": "Optional error text"
-            #     },
-            #     "statistics": {
-            #         "analysisDurationMs": 10000,
-            #         "totalBytes": 15900,
-            #         "packets": 105,
-            #         "devices": [
-            #             {
-            #                 "mac": "00:00:00:00:00:00",
-            #                 "countries": [
-            #                     {
-            #                         "country": "US",
-            #                         "bytes": 10000
-            #                     },
-            #                     {
-            #                         "country": "CA",
-            #                         "bytes": 5900
-            #                     }
-            #                 ],
-            #                 "bytes": 15900
-            #             }
-            #         ]
-            #     },
-            #     "detections": [
-            #         {
-            #             "mac": "00:00:00:00:00:00",
-            #             "type": "Warning/Alert",
-            #             "description": "Full description of event",
-            #             "time": "2025-03-25T14:00:00.000Z"
-            #         }
-            #     ]
-            # }
-            #
-            #
-            #
-            # TODO: Second version (Gerhard, 17-07-2025)
+            # Current version
             #
             # "detections": [                                               # Liste mit Eintrag für jedes Gerät aus der Config
             # {
@@ -300,33 +252,33 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, allow_training, pcap
             #     "score": "100"
             #     }
             # ],
-            # "ML": {                                                       # Dict mit ML Result
-            #     "type": "Warning",
+            # "ml": {                                                       # Dict mit ML Result
+            #     "type": "Alert",
             #     "description": "Anomaly detected",
-            #     "first_occurrence": "TODO",                                 # Erstes packet, Beginn erstes window, Beginn erster flow... mit detection
-            #     "num_occurrences": "100",                                   # Anzahl results über threshold
-            #     "score": 81.52,                                # Wenn  detection dann Durchschintt der Scores die über treshold lagen?
+            #     "first_occurrence": "TODO",                               # Erstes packet, Beginn erstes window, Beginn erster flow... mit detection
+            #     "num_occurrences": "101",                                 # Anzahl results über threshold
+            #     "score": 81.52,                                           # Wenn  detection dann Durchschintt der Scores die über treshold lagen?
             # }
             # },
             # {
             # "mac": "0a:05:b6:23:94:66",
             # "suricata": [],                                               # Suricata Liste kann leer sein
-            # "ML": {
+            # "ml": {
             #     "type": "Normal",
-            #     "description": "No Anomalies detected", or None
-            #     "first_occurrence": None,                                 # Erstes packet, Beginn erstes window, Beginn erster flow... der PCAP
-            #     "num_occurrences": "0",                                     # 0 oder Anzahl überprüfter Pakete, Windows, Flows...?
-            #     "score": 5.10,                                # Wenn keine detection dann Durchschnitt über alle Auswertungen?
+            #     "description": "No Anomalies detected",
+            #     "first_occurrence": "",                                   # Erstes packet, Beginn erstes window, Beginn erster flow... der PCAP
+            #     "num_occurrences": 0,                                     # 0 oder Anzahl überprüfter Pakete, Windows, Flows...?
+            #     "score": 5.10,                                            # Wenn keine detection dann Durchschnitt über alle Auswertungen?
             # }
             # },
             # {
             # "mac": "bc:93:81:fe:44:32",
             # "suricata": [],
-            # "ML": {
-            #     "type": "Inactive",
-            #     "description": "No Packets",
-            #     "first_occurrence": "TODO",                                 # ? Eigentlich, egal vieleicht 1. Januar 1970 00:00:00
-            #     "num_occurrences": "0",                                     # 0
+            # "ml": {
+            #     "type": "Normal",                                           # Inactive?
+            #     "description": "",
+            #     "first_occurrence": "",                                     # Empty
+            #     "num_occurrences": 0,                                       # 0
             #     "score": 0.0,                                               # 0.0 wenn keine Pakete vorhanden
             # }
             # }
@@ -337,17 +289,19 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, allow_training, pcap
             # FROM ML:
             # [
             #   {<MAC1>: {
-            #     "type": "Warning",   # Normal, Alert
+            #     "type": "Alert",   # Normal, Alert
             #     "description": "47 Anomalies detected",
-            #     "first_occurrence": "some data",
+            #     "first_occurrence": "2025-09-23T17:10:28.461590+02:00",
             #     "num_occurrences": 47,
+            #     "score": 64.09
             #     }
             #   },
             #   {<MAC4>: {
-            #     "type": "Warning",   # Normal, Alert
+            #     "type": "Alert",   # Normal, Alert
             #     "description": "29 Anomalies detected",
-            #     "first_occurrence": "some date",
+            #     "first_occurrence": "2025-09-21T14:09:42.384932+02:00",
             #     "num_occurrences": 29,
+            #     "score": 43.45
             #     }
             #   }
             # ]
@@ -355,23 +309,21 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, allow_training, pcap
             #
             #
             # Merge to a final result as json
-
-            # In case the timeout is not reached, stop the monitoring
-            stop_monitoring()
-
             try:
+                # In case the timeout is not reached, stop the monitoring
+                stop_monitoring()
+
+                # Get current macs from meta.json
+                current_macs = []
+                with open(META_JSON, "r") as meta_file:
+                    current_macs = json.load(meta_file).keys()
+
                 info = {"file": pcap_name, 
                         "time": datetime.now(ZoneInfo("Europe/Berlin")).isoformat(), 
                         "result": {"status": "success"}
                         }
-                
-                data = aggregate_pipes(dict(literal_eval(rb_pipe.read().strip())), dict(literal_eval(ml_pipe.read().strip())))
-                
-                # Load training_progress.json
-                training = {"training": {}}
-                if os.path.exists(TRAINING_JSON):
-                    with open(TRAINING_JSON, "r") as training_file:
-                        training["training"] = json.load(training_file)
+
+                data = aggregate_pipes(dict(literal_eval(rb_pipe.read().strip())), dict(literal_eval(ml_pipe.read().strip())), current_macs)
                 
                 config = {"config": {"allow_training": False, "callback_url": "", "meta_json": {}}}
                 config["config"]["allow_training"] = allow_training
@@ -380,9 +332,21 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, allow_training, pcap
                     with open(META_JSON, "r") as meta_file:
                         config["config"]["meta_json"] = json.load(meta_file)
 
+                # Load training for current devices from training_progress.json
+                training = {"training": {}}
+                tmp_training = {}
+                if os.path.exists(TRAINING_JSON):
+                    with open(TRAINING_JSON, "r") as training_file:
+                        tmp_training = json.load(training_file)
+                # Filter not relevant training progress
+                for mac_key, training_value in tmp_training.items():
+                    if mac_key in current_macs:
+                        training["training"][mac_key] = training_value
+                tmp_training.clear()
+
                 meta = collect_meta()
                 
-                results = {**info, **data, **training, **config, **meta}
+                results = {**info, **data, **config, **training, **meta}
                 send_results(results, callback_url)
 
                 if get_state() == ANALYZING:
