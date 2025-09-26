@@ -29,8 +29,12 @@ def get_cpuinfo():
     cmd = f"lscpu | grep name"
     lscpu_process = subprocess.run(cmd, capture_output=True, shell=True)
     if lscpu_process.returncode != 0:
-        # Something went wrong
-        raise Exception(lscpu_process) 
+        if lscpu_process.returncode == 1:
+            # Nothing was found
+            return "No information"
+        else:
+            # Something went wrong
+            raise Exception(lscpu_process) 
     else:
         return lscpu_process.stdout
 
@@ -44,8 +48,12 @@ def get_gpuinfo():
     cmd = f"lspci | grep VGA"
     lspci_process = subprocess.run(cmd, capture_output=True, shell=True)
     if lspci_process.returncode != 0:
-        # Something went wrong
-        raise Exception(lspci_process) 
+        if lspci_process.returncode == 1:
+            # Nothing was found
+            return "No information"
+        else:
+            # Something went wrong
+            raise Exception(lspci_process) 
     else:
         return lspci_process.stdout
 
