@@ -138,7 +138,7 @@ WORKDIR /pipe
 WORKDIR /config
 
 # Fourth directory is for the stat collection
-WORKDIR /stat,
+WORKDIR /stat
 
 # Copy suricata yaml file to not use the default generated yaml file
 COPY suricata.yaml /config/

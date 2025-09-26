@@ -53,6 +53,8 @@ TRAINING_JSON = os.path.join("/shared/ml", "training_progress.json")
 META_JSON = os.path.join("/config", "meta.json")
 # Use the default log directory provided by the .yaml file
 SURICATA_YAML_DIRECTORY = "/var/log/suricata"
+# Directory to save the monitor data
+SYSSTAT_DIRECTORY = "/stat"
     
 
 def load_json_from_file(monitoring_file_name, logger=default_logger):
