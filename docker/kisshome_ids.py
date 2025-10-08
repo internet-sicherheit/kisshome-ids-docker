@@ -57,6 +57,7 @@ class KisshomeIDS:
         self.pcap_name = ""
         self.allow_training = False
         self.callback_url = ""
+        self.interval = 0
 
         # Set path and dir for the .json files
         self.meta_json = os.path.join("/config", "meta.json")
@@ -110,11 +111,12 @@ class KisshomeIDS:
         self.logger.debug(f"{pcap_name=}")
         self.logger.info("Updated pcap name")
 
-    def update_configuration(self, callback_url, allow_training):
+    def update_configuration(self, callback_url, interval, allow_training):
         """
         Update the configuration params of our IDS environment
 
         @param callback_url: URL of the adapter for receiving the results
+        @param interval: span of time between each regular analysis attempt set by the user
         @param allow_training: a var to check if the user allows training
         @return: nothing
         """
@@ -124,13 +126,14 @@ class KisshomeIDS:
 
         # meta_json handled in API
         self.callback_url = callback_url
+        self.interval = interval
         self.allow_training = allow_training
 
         # Recreate all processes, but don't start automatically
         self.configure_analysis()
         self.configure_aggregation()
 
-        self.logger.debug(f"{callback_url=}, {allow_training=}")
+        self.logger.debug(f"{callback_url=}, {interval=}, {allow_training=}")
         self.logger.info("Updated configuration")
 
     def configure_analysis(self):
@@ -160,7 +163,7 @@ class KisshomeIDS:
         """
         try:
             # Create new process for the aggregation
-            aggregate_process = Process(target=aggregate, name="aggregate_process", args=(self.rb_result_pipe, self.ml_result_pipe, self.callback_url, self.allow_training, self.pcap_name))
+            aggregate_process = Process(target=aggregate, name="aggregate_process", args=(self.rb_result_pipe, self.ml_result_pipe, self.callback_url, self.interval, self.allow_training, self.pcap_name))
             self.aggregation_processes.append(aggregate_process)
 
             self.logger.info("Aggregation configured")

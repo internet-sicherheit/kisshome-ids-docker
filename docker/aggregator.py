@@ -213,13 +213,14 @@ def aggregate_pipes(rb_pipe_dict, ml_pipe_dict, known_macs, logger=default_logge
     return analysis_results
 
 
-def aggregate(rb_result_pipe, ml_result_pipe, callback_url, allow_training, pcap_name, logger=default_logger):
+def aggregate(rb_result_pipe, ml_result_pipe, callback_url, interval, allow_training, pcap_name, logger=default_logger):
     """
     Aggregate the data of the rule based and ML based analysis to a result as a json
     
     @param rb_result_pipe: path to the pipe for the rb result content
     @param ml_result_pipe: path to the pipe for the ml result content
     @param callback_url: URL of the adapter to  recieve the results
+    @param interval: span of time between each regular analysis attempt set by the user
     @param allow_training: boolean if the user allows training of devices
     @param pcap_name: the name of the pcap file to process
     @param logger: logger for logging, default default_logger
@@ -327,9 +328,10 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, allow_training, pcap
 
                 data = aggregate_pipes(dict(literal_eval(rb_pipe.read().strip())), dict(literal_eval(ml_pipe.read().strip())), current_macs)
                 
-                config = {"config": {"allow_training": False, "callback_url": "", "meta_json": {}}}
-                config["config"]["allow_training"] = allow_training
+                config = {"config": {"callback_url": "", "interval": 0, "allow_training": False, "meta_json": {}}}
                 config["config"]["callback_url"] = callback_url
+                config["config"]["interval"] = interval
+                config["config"]["allow_training"] = allow_training
                 if os.path.exists(META_JSON):
                     with open(META_JSON, "r") as meta_file:
                         config["config"]["meta_json"] = json.load(meta_file)

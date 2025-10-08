@@ -50,7 +50,7 @@ logger.propagate = False
 setproctitle.setproctitle(__file__)
 
 # Version
-VERSION = "1.2.5"
+VERSION = "1.2.6"
 
 # For pcap check
 PCAP_MAGIC_NUMBERS = {
@@ -95,17 +95,18 @@ ns = api.namespace("", description=f"{ENV_NAME} operations")
 # Models for JSON like requests or responses
 status_configuration_model = ns.model("Status configuration",
     {
-        "callback_url": fields.String(required=True, description="The current callback URL of the IDS"),
-        "allow_training": fields.Boolean(required=True, description="The current value for allowing training of the IDS"),
-        "meta_json": fields.Raw(required=True, description="The current meta.json of the IDS") # Known
+        "callback_url": fields.String(required=True, description="The current callback URL for the IDS"),
+        "interval": fields.Integer(required=True, description="The current interval set for regular analysis attempts for the IDS"),
+        "allow_training": fields.Boolean(required=True, description="The current value for allowing training for the IDS"),
+        "meta_json": fields.Raw(required=True, description="The current meta.json for the IDS") # Known
     }
 )
 status_message_model = ns.model("Status message",
     {
         "version": fields.String(required=True, description="The version of the IDS"),
         "status": fields.String(required=True, description="The status of the IDS"),
-        "training": fields.Raw(required=True, description="The training with progress and description for each device"), # Has dynamic mac keys
-        "configuration": fields.Nested(status_configuration_model, required=True, description="The current configuration")
+        "training": fields.Raw(required=True, description="The training with progress and description for each device of the IDS"), # Has dynamic mac keys
+        "configuration": fields.Nested(status_configuration_model, required=True, description="The used configuration of the IDS")
     }
 )
 status_model = ns.model("Status",
@@ -116,9 +117,10 @@ status_model = ns.model("Status",
 )
 # Parser otherwise
 config_parser = reqparse.RequestParser()
-config_parser.add_argument('meta_json', location='files', type=FileStorage, required=True, help='The list with device MACs for filtering')
 config_parser.add_argument('callback_url', location='form', type=str, required=True, help='The URL to send the results of the IDS')
+config_parser.add_argument('interval', location='form', type=int, required=True, help='The interval set by the user for regular analysis attempts')
 config_parser.add_argument('allow_training', location='form', type=inputs.boolean, required=True, help='Is training allowed') # Do not use type=bool
+config_parser.add_argument('meta_json', location='files', type=FileStorage, required=True, help='The list with device MACs for filtering')
 
 pcap_parser = reqparse.RequestParser()
 pcap_parser.add_argument('pcap_name', location='args', type=str, required=True, help='The name of the pcap file')
@@ -147,7 +149,7 @@ class Status(Resource):
             message = {"version": VERSION,
                        "status": get_state(),
                        "training": training_json,
-                       "configuration": {"callback_url": ids.callback_url, "allow_training": ids.allow_training, "meta_json": meta_json}}
+                       "configuration": {"callback_url": ids.callback_url, "interval": ids.interval, "allow_training": ids.allow_training, "meta_json": meta_json}}
             logger.debug(f"Current status: {message}")
             return {"result": "Success", "message": message}, 200
         except Exception as e:
@@ -181,10 +183,11 @@ class Configuration(Resource):
                 # Parse args
                 meta_json = args.get('meta_json')
                 callback_url = args.get('callback_url')
+                interval = args.get('interval')
                 allow_training = args.get('allow_training')
 
                 # Update config
-                ids.update_configuration(callback_url, allow_training)
+                ids.update_configuration(callback_url=callback_url, interval=interval, allow_training=allow_training)
                 
                 meta_data = None
                 # Attached file
@@ -209,7 +212,7 @@ class Configuration(Resource):
                 # Set state to running now
                 set_state(RUNNING)
 
-                logger.debug(f"New configuration: callback_url={callback_url}, allow_training={allow_training}, meta_json={meta_json}")
+                logger.debug(f"New configuration: {callback_url=}, {interval=}, {allow_training=}, {meta_json=}")
 
                 return {"result": "Success", "message": "Configuration set"}, 200
             except Exception as e:
