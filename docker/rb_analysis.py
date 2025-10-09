@@ -14,6 +14,7 @@ import subprocess
 import time
 import tempfile
 import schedule
+import psutil
 import signal
 
 from logging.handlers import TimedRotatingFileHandler
@@ -62,7 +63,8 @@ def rb_start_deamon(logger=default_logger):
     """
     try:
         # Only start when there is no suricata process running by checking for a .pid file
-        if not os.path.exists("/var/run/suricata.pid"):
+        deamon_pid_file = "/var/run/suricata.pid"
+        if not os.path.exists(deamon_pid_file):
             # Prepare rules for the initial startup
             if rb_prepare_rules():
                 cmd = f"suricata -c /config/suricata.yaml --unix-socket -D"
@@ -91,17 +93,28 @@ def rb_start_deamon(logger=default_logger):
             else:
                 logger.warning("Suricata rule preparation failed")
         else:
-            # Handle a docker restart
-            deamon_pid = 0
-            with open("/var/run/suricata.pid", "r") as deamon_file:
-                deamon_pid = int(deamon_file.read().strip()) # File has only process id 
-
-            logger.warning(f"Suricata deamon already running with pid={deamon_pid}, kill and restart it")
-
-            # Kill any existing deamon, remove .pid file and call function again
-            os.kill(deamon_pid, signal.SIGKILL)
-            os.remove("/var/run/suricata.pid")
-            rb_start_deamon()
+            try:
+                # Handle a docker restart
+                deamon_pid = 0
+                with open(deamon_pid_file, "r") as deamon_file:
+                    deamon_pid = int(deamon_file.read().strip()) # File has only process id 
+                logger.debug(f"Suricata deamon already running with pid={deamon_pid}, kill and restart it")
+                # Kill any existing deamon, remove .pid file and call function again
+                if not psutil.pid_exists(deamon_pid):
+                    logger.debug(f"No deamon process with pid={deamon_pid}")
+                else:
+                    deamon_process = psutil.Process(deamon_pid)
+                    # Double-check before killing 
+                    if "suricata" in deamon_process.name().lower():
+                        os.kill(deamon_pid, signal.SIGKILL)
+                        logger.debug(f"Killed existing {deamon_process.name()} with pid={deamon_pid}")       
+            except (ProcessLookupError, psutil.NoSuchProcess):
+                logger.debug("Invalid or dead deamon process, skipping...")
+                pass
+            finally:
+                os.remove(deamon_pid_file)
+                logger.info(f"Killed and removed existing Suricata deamon process with pid={deamon_pid}, start new deamon")
+                rb_start_deamon()      
     except Exception as e:
         set_state(ERROR)
         logger.exception(f"Could not start Suricata deamon: {e}")

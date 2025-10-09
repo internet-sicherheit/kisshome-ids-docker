@@ -96,6 +96,7 @@ RUN wget https://github.com/sysstat/sysstat/archive/refs/tags/v${SYSSTAT_VERSION
 # Install python dependencies for "normal" packages
 RUN pip3 install --break-system-packages \
     PyYAML \
+    psutil \
     setproctitle \
     filelock \
     schedule \
