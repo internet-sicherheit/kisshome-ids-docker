@@ -57,7 +57,7 @@ class KisshomeIDS:
         self.pcap_name = ""
         self.allow_training = False
         self.callback_url = ""
-        self.interval = 0
+        self.save_threshold_seconds = ""
 
         # Set path and dir for the .json files
         self.meta_json = os.path.join("/config", "meta.json")
@@ -111,12 +111,12 @@ class KisshomeIDS:
         self.logger.debug(f"{pcap_name=}")
         self.logger.info("Updated pcap name")
 
-    def update_configuration(self, callback_url, interval, allow_training):
+    def update_configuration(self, callback_url, save_threshold_seconds, allow_training):
         """
         Update the configuration params of our IDS environment
 
         @param callback_url: URL of the adapter for receiving the results
-        @param interval: span of time between each regular analysis attempt set by the user
+        @param save_threshold_seconds: interval in seconds between each regular analysis attempt set by the user
         @param allow_training: a var to check if the user allows training
         @return: nothing
         """
@@ -126,14 +126,14 @@ class KisshomeIDS:
 
         # meta_json handled in API
         self.callback_url = callback_url
-        self.interval = interval
+        self.save_threshold_seconds = save_threshold_seconds
         self.allow_training = allow_training
 
         # Recreate all processes, but don't start automatically
         self.configure_analysis()
         self.configure_aggregation()
 
-        self.logger.debug(f"{callback_url=}, {interval=}, {allow_training=}")
+        self.logger.debug(f"{callback_url=}, {save_threshold_seconds=}, {allow_training=}")
         self.logger.info("Updated configuration")
 
     def configure_analysis(self):
@@ -150,6 +150,7 @@ class KisshomeIDS:
             ml_process = Process(target=ml_analyze, name="ml_process", args=(self.ml_pcap_pipe, self.ml_result_pipe, self.meta_json, self.allow_training, self.training_json))
             self.analysis_processes.append(ml_process)
 
+            self.logger.debug(f"{rb_process=}, {ml_process=}")
             self.logger.info("Analysis configured")
         except Exception as e:
             self.logger.exception(e)
@@ -163,9 +164,10 @@ class KisshomeIDS:
         """
         try:
             # Create new process for the aggregation
-            aggregate_process = Process(target=aggregate, name="aggregate_process", args=(self.rb_result_pipe, self.ml_result_pipe, self.callback_url, self.interval, self.allow_training, self.pcap_name))
+            aggregate_process = Process(target=aggregate, name="aggregate_process", args=(self.rb_result_pipe, self.ml_result_pipe, self.callback_url, self.save_threshold_seconds, self.allow_training, self.pcap_name))
             self.aggregation_processes.append(aggregate_process)
 
+            self.logger.debug(f"{aggregate_process=}")
             self.logger.info("Aggregation configured")
         except Exception as e:
             self.logger.exception(e)
@@ -183,6 +185,7 @@ class KisshomeIDS:
                 if not analysis_process.is_alive():
                     analysis_process.start()
 
+            self.logger.debug(f"{analysis_process=}")
             self.logger.info("Analysis started")
         except Exception as e:
             self.logger.exception(e)
@@ -200,6 +203,7 @@ class KisshomeIDS:
                 if not aggregation_process.is_alive():
                     aggregation_process.start()
 
+            self.logger.debug(f"{aggregation_process=}")
             self.logger.info("Aggregation started")
         except Exception as e:
             self.logger.exception(e)
@@ -213,6 +217,7 @@ class KisshomeIDS:
         """
         try:
             # Check if the processes are alive before killing them
+            self.logger.debug(f"{self.analysis_processes=}")
             for analysis_process in self.analysis_processes:
                 if analysis_process.is_alive():
                     analysis_process.kill()
@@ -234,6 +239,7 @@ class KisshomeIDS:
         """
         try:
             # Check if the process is alive before killing it
+            self.logger.debug(f"{self.aggregation_processes=}")
             for aggregation_process in self.aggregation_processes:
                 if aggregation_process.is_alive():
                     aggregation_process.kill()

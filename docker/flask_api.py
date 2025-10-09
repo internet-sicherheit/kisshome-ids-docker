@@ -50,7 +50,7 @@ logger.propagate = False
 setproctitle.setproctitle(__file__)
 
 # Version
-VERSION = "1.2.6"
+VERSION = "1.2.7"
 
 # For pcap check
 PCAP_MAGIC_NUMBERS = {
@@ -96,7 +96,7 @@ ns = api.namespace("", description=f"{ENV_NAME} operations")
 status_configuration_model = ns.model("Status configuration",
     {
         "callback_url": fields.String(required=True, description="The current callback URL for the IDS"),
-        "interval": fields.Integer(required=True, description="The current interval set for regular analysis attempts for the IDS"),
+        "save_threshold_seconds": fields.String(required=True, description="The current interval in seconds set for regular analysis attempts for the IDS"),
         "allow_training": fields.Boolean(required=True, description="The current value for allowing training for the IDS"),
         "meta_json": fields.Raw(required=True, description="The current meta.json for the IDS") # Known
     }
@@ -118,7 +118,7 @@ status_model = ns.model("Status",
 # Parser otherwise
 config_parser = reqparse.RequestParser()
 config_parser.add_argument('callback_url', location='form', type=str, required=True, help='The URL to send the results of the IDS')
-config_parser.add_argument('interval', location='form', type=int, required=True, help='The interval set by the user for regular analysis attempts')
+config_parser.add_argument('save_threshold_seconds', location='form', type=str, required=True, help='The interval in seconds set by the user for regular analysis attempts')
 config_parser.add_argument('allow_training', location='form', type=inputs.boolean, required=True, help='Is training allowed') # Do not use type=bool
 config_parser.add_argument('meta_json', location='files', type=FileStorage, required=True, help='The list with device MACs for filtering')
 
@@ -149,8 +149,9 @@ class Status(Resource):
             message = {"version": VERSION,
                        "status": get_state(),
                        "training": training_json,
-                       "configuration": {"callback_url": ids.callback_url, "interval": ids.interval, "allow_training": ids.allow_training, "meta_json": meta_json}}
+                       "configuration": {"callback_url": ids.callback_url, "save_threshold_seconds": ids.save_threshold_seconds, "allow_training": ids.allow_training, "meta_json": meta_json}}
             logger.debug(f"Current status: {message}")
+            logger.info("Returned current status successfully")
             return {"result": "Success", "message": message}, 200
         except Exception as e:
             set_state(ERROR)
@@ -183,11 +184,11 @@ class Configuration(Resource):
                 # Parse args
                 meta_json = args.get('meta_json')
                 callback_url = args.get('callback_url')
-                interval = args.get('interval')
+                save_threshold_seconds = args.get('save_threshold_seconds')
                 allow_training = args.get('allow_training')
 
                 # Update config
-                ids.update_configuration(callback_url=callback_url, interval=interval, allow_training=allow_training)
+                ids.update_configuration(callback_url=callback_url, save_threshold_seconds=save_threshold_seconds, allow_training=allow_training)
                 
                 meta_data = None
                 # Attached file
@@ -212,7 +213,8 @@ class Configuration(Resource):
                 # Set state to running now
                 set_state(RUNNING)
 
-                logger.debug(f"New configuration: {callback_url=}, {interval=}, {allow_training=}, {meta_json=}")
+                logger.debug(f"New configuration: {callback_url=}, {save_threshold_seconds=}, {allow_training=}, {meta_json=}")
+                logger.info("New configuration applied successfully")
 
                 return {"result": "Success", "message": "Configuration set"}, 200
             except Exception as e:
@@ -290,7 +292,8 @@ class Pcap(Resource):
                         rb_pipe.write(pcap_data)
                         ml_pipe.write(pcap_data)
 
-                        logger.debug(f"Pipes written with {len(pcap_data)} bytes from {pcap_name=}")
+                logger.debug(f"{pcap_data=}")       
+                logger.info(f"Pipes written with {len(pcap_data)} bytes from {pcap_name=}")
 
                 return {"result": "Success", "message": f"Pcap {pcap_name} received, start {ENV_NAME}"}, 200
             except Exception as e:

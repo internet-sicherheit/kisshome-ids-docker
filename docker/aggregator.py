@@ -80,7 +80,8 @@ def load_json_from_file(monitoring_file_name, logger=default_logger):
         except json.JSONDecodeError:
             # Last resort: return raw lines
             result[monitoring_file_name] = lines
-    logger.debug(f"Loaded json from file {monitoring_file_name}.json")
+    logger.debug(f"{result=}")
+    logger.info(f"Loaded json from file {monitoring_file_name}.json")
     return result
 
 
@@ -131,7 +132,8 @@ def collect_meta(logger=default_logger):
 
     # Return results
     meta_informations["meta"] = {**suricata_log, **suricata_stat, **cpu, **gpu, **iostat, **pidstat, **sar}
-    logger.info(f"Collected meta informations: {meta_informations}")
+    logger.debug(f"{meta_informations=}")
+    logger.info(f"Finished collection of meta informations")
     return meta_informations
 
 
@@ -147,7 +149,8 @@ def send_results(results, callback_url, logger=default_logger):
     # TODO Send results to the provided url
     try:
         #http://172.17.0.1:4711/data -> docker0 bridge on the host
-        logger.info(f"Sending {results=} to {callback_url=}")
+        logger.debug(f"Sending {results=} to {callback_url=}")
+        logger.info(f"Sending results to {callback_url=}")
 
         resp = requests.post(callback_url, json=results, verify=False)
         resp.raise_for_status()
@@ -155,7 +158,8 @@ def send_results(results, callback_url, logger=default_logger):
         logger.exception(e)
         set_state(ERROR)
         raise
-    logger.debug(f"Send {results=} to {callback_url=}")
+    logger.info(f"Send {results=} to {callback_url=}")
+
 
 
 def aggregate_pipes(rb_pipe_dict, ml_pipe_dict, known_macs, logger=default_logger):
@@ -208,19 +212,20 @@ def aggregate_pipes(rb_pipe_dict, ml_pipe_dict, known_macs, logger=default_logge
     # Then aggregate the statistics
     analysis_results["statistics"] = {**rb_pipe_dict["statistics"], **ml_pipe_dict["statistics"]}
 
-    logger.debug(f"Finished parsing pipes to dict: {analysis_results}")
+    logger.debug(f"{analysis_results=}")
+    logger.info(f"Finished parsing pipes to dictionary")
     
     return analysis_results
 
 
-def aggregate(rb_result_pipe, ml_result_pipe, callback_url, interval, allow_training, pcap_name, logger=default_logger):
+def aggregate(rb_result_pipe, ml_result_pipe, callback_url, save_threshold_seconds, allow_training, pcap_name, logger=default_logger):
     """
     Aggregate the data of the rule based and ML based analysis to a result as a json
     
     @param rb_result_pipe: path to the pipe for the rb result content
     @param ml_result_pipe: path to the pipe for the ml result content
     @param callback_url: URL of the adapter to  recieve the results
-    @param interval: span of time between each regular analysis attempt set by the user
+    @param save_threshold_seconds: interval in seconds between each regular analysis attempt set by the user
     @param allow_training: boolean if the user allows training of devices
     @param pcap_name: the name of the pcap file to process
     @param logger: logger for logging, default default_logger
@@ -328,9 +333,9 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, interval, allow_trai
 
                 data = aggregate_pipes(dict(literal_eval(rb_pipe.read().strip())), dict(literal_eval(ml_pipe.read().strip())), current_macs)
                 
-                config = {"config": {"callback_url": "", "interval": 0, "allow_training": False, "meta_json": {}}}
+                config = {"config": {"callback_url": "", "save_threshold_seconds": "", "allow_training": False, "meta_json": {}}}
                 config["config"]["callback_url"] = callback_url
-                config["config"]["interval"] = interval
+                config["config"]["save_threshold_seconds"] = save_threshold_seconds
                 config["config"]["allow_training"] = allow_training
                 if os.path.exists(META_JSON):
                     with open(META_JSON, "r") as meta_file:
@@ -360,3 +365,5 @@ def aggregate(rb_result_pipe, ml_result_pipe, callback_url, interval, allow_trai
             except Exception as e:
                 logger.exception(e)
                 set_state(ERROR)
+            
+            logger.info(f"Aggregation for {pcap_name=} done, waiting for next pcap...")

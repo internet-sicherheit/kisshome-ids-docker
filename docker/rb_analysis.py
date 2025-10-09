@@ -14,6 +14,7 @@ import subprocess
 import time
 import tempfile
 import schedule
+import signal
 
 from logging.handlers import TimedRotatingFileHandler
 from states import set_state, ERROR
@@ -90,7 +91,17 @@ def rb_start_deamon(logger=default_logger):
             else:
                 logger.warning("Suricata rule preparation failed")
         else:
-            logger.info("Suricata already running")
+            # Handle a docker restart
+            deamon_pid = 0
+            with open("/var/run/suricata.pid", "r") as deamon_file:
+                deamon_pid = int(deamon_file.read().strip()) # File has only process id 
+
+            logger.warning(f"Suricata deamon already running with pid={deamon_pid}, kill and restart it")
+
+            # Kill any existing deamon, remove .pid file and call function again
+            os.kill(deamon_pid, signal.SIGKILL)
+            os.remove("/var/run/suricata.pid")
+            rb_start_deamon()
     except Exception as e:
         set_state(ERROR)
         logger.exception(f"Could not start Suricata deamon: {e}")
@@ -105,7 +116,7 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, meta_json, logger=default
     @param logger: logger for logging, default_logger
     @return: nothing
     """
-    logger.info(f"Start using suricata to analyze pcap data")
+    logger.info(f"Start using Suricata to analyze pcap data")
     # This process is named after the program
     setproctitle.setproctitle(__file__)
 
@@ -172,6 +183,8 @@ def rb_analyze(rb_pcap_pipe_path, rb_result_pipe_path, meta_json, logger=default
                     logger.info(f"Suricatasc done: {suricatasc_process}, took {duration_s}s")
                     # Write results
                     rb_write_results(rb_result_pipe_path, duration_s)
+
+            logger.info(f"Suricata analysis done, waiting for next pcap...")
     except Exception as e:
         set_state(ERROR)
         logger.exception(f"Could not analyze the pcap with Suricata: {e}")
@@ -186,7 +199,6 @@ def rb_write_results(rb_result_pipe_path, duration, logger=default_logger):
     @param logger: logger for logging, default_logger
     @return: content as a string
     """
-    logger.info(f"Write alerts of {SURICATA_YAML_DIRECTORY}/eve.json to {rb_result_pipe_path}")
     try: 
         with open(os.path.join(SURICATA_YAML_DIRECTORY, "eve.json"), "r") as result_file:
             filtered_results = rb_filter_results(result_file.readlines(), duration)
@@ -210,7 +222,6 @@ def rb_filter_results(eve_json, duration, logger=default_logger):
     @param logger: logger for logging, default default_logger
     @return: all valid alerts as a dictionary
     """
-    logger.info("Start filtering alerts from results")
     # Structure:
     # "detections": [{"mac": "", "suricata": [], "ml": {}}]   
     alert_dictionary = {"detections": [], "statistics": {"suricataTotalRules": rb_count_rules(), "suricataAnalysisDurationMs": duration * 1000}}
