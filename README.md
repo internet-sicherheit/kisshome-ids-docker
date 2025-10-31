@@ -1,4 +1,4 @@
-# Docker image with suricata for various architectures
+# KISSHome IDS
 
 Make sure docker is running on the target system. Use `docker-ce` and not `docker`. The install can look like this:
 
