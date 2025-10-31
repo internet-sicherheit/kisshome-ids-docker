@@ -1,0 +1,77 @@
+# MIT License
+#
+# Copyright (c) 2025 if(is)
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+#
+# Use debian for the docker image from dockerhub for all architectures
+#
+# Multistage: First build binaries and copy to real image later
+# Building Suricata causes much overhead, so build latest version of Suricata 7
+FROM debian:stable
+
+# Use a temporary location to build suricata binaries
+ARG INSTALL_LOCATION=/fakeroot
+
+# Set the temporary location
+ENV PREFIX=${INSTALL_LOCATION}
+
+# Install apt dependencies
+RUN apt update && \
+    apt install -y \
+    build-essential \
+    libpcre2-dev \
+    libyaml-dev \
+    libjansson-dev \
+    libmagic-dev \
+    libpcap-dev \
+    libnet1-dev \
+    libcap-ng-dev \
+    liblua5.3-dev \
+    libgeoip-dev \
+    libhiredis-dev \
+    pkg-config \
+    autoconf \
+    automake \
+    libtool \
+    git \
+    wget \
+    make \
+    xz-utils \
+    python3-dev \
+    python3-yaml \
+    pciutils \
+    rustc \
+    cargo \
+    && apt clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Define Suricata version
+ARG SURICATA_VERSION=7.0.12
+
+# Download and build with static libraries and without hardware optimization
+RUN wget \
+    https://www.openinfosecfoundation.org/download/suricata-${SURICATA_VERSION}.tar.gz \
+    && tar -xvzf suricata-${SURICATA_VERSION}.tar.gz \
+    && cd suricata-${SURICATA_VERSION} \
+    && ./configure --disable-shared --disable-gccmarch-native --prefix=/usr --sysconfdir=/etc --localstatedir=/var \
+    && make -j$(nproc) \
+    && make install install-conf DESTDIR=${INSTALL_LOCATION} \
+    && cd .. \
+    && rm -rf suricata-${SURICATA_VERSION}*

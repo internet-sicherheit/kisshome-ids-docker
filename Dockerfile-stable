@@ -1,0 +1,147 @@
+# MIT License
+#
+# Copyright (c) 2025 if(is)
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+#
+# Use debian for the docker image from dockerhub for all architectures
+FROM debian:stable-slim AS ids
+
+# Install apt dependencies
+RUN apt update && \
+    apt install -y \
+    wget \
+    libpcre2-8-0 \
+    libyaml-0-2 \
+    libjansson4 \
+    libmagic1 \
+    libpcap0.8 \
+    libnet1 \
+    libcap-ng0 \
+    liblua5.3-0 \
+    libgeoip1 \
+    libhiredis1.1.0 \
+    python3 \
+    python3-pip \
+    pciutils \
+    && apt clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set sysstat version
+ARG SYSSTAT_VERSION=12.7.8
+
+# Download, build, install, and clean up
+# Cannot move to builder stage because of static file linking inside the sar binary
+# But it is not crucial since only wget needs to be installed for the image version (minimal overhead)
+RUN wget https://github.com/sysstat/sysstat/archive/refs/tags/v${SYSSTAT_VERSION}.tar.gz && \
+    tar -xzf v${SYSSTAT_VERSION}.tar.gz && \
+    cd sysstat-${SYSSTAT_VERSION} && \
+    ./configure --prefix=/usr && \
+    make && \
+    make install && \
+    cd .. && \
+    rm -rf sysstat-${SYSSTAT_VERSION}*
+
+# Install python dependencies for "normal" packages
+RUN pip3 install --break-system-packages \
+    PyYAML \
+    psutil \
+    setproctitle \
+    filelock \
+    schedule \
+    requests \
+    flask \
+    flask-restx \
+    gunicorn \
+    dpkt \
+    numpy \
+    pandas==2.2.3
+
+# Install python dependencies for pytorch 
+RUN pip3 install --break-system-packages torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# Copy Suricata binaries and support files from base image
+COPY --from=kisshome/ids:base /fakeroot/usr/bin/suricata* /usr/bin/
+COPY --from=kisshome/ids:base /fakeroot/usr/lib/suricata /usr/lib/suricata
+COPY --from=kisshome/ids:base /fakeroot/etc/suricata /etc/suricata
+COPY --from=kisshome/ids:base /fakeroot/var/log/suricata /var/log/suricata
+COPY --from=kisshome/ids:base /fakeroot/var/lib/suricata /var/lib/suricata
+COPY --from=kisshome/ids:base /fakeroot/var/run/suricata /var/run/suricata
+
+# Set up suricata properly
+# Also enable et/open dataset as default and add all relevant rulesets by abuse.ch (currently only URLhaus is maintained)
+#RUN suricata-update && suricata-update enable-source abuse.ch/sslbl-blacklist && suricata-update enable-source abuse.ch/sslbl-c2 && suricata-update enable-source abuse.ch/sslbl-ja3 && suricata-update update-sources
+RUN suricata-update update-sources && suricata-update enable-source abuse.ch/urlhaus && suricata-update --no-test --no-reload
+
+# Copy suricata rules to the default rule path in the yaml
+COPY kisshome.rules /var/lib/suricata/rules/
+
+# Set up working directories
+# First directory is for the shared volume mounted on the host, used later
+WORKDIR /shared
+
+# Second directory is for pipes, used later
+WORKDIR /pipe
+
+# Third directory is for the configuration
+WORKDIR /config
+
+# Copy suricata yaml file to not use the default generated yaml file
+COPY suricata.yaml /config/
+
+# Copy base model
+COPY base_model.pt /config/
+
+# Copy csv file
+COPY IP2LOCATION-LITE-DB1.CSV/IP2LOCATION-LITE-DB1.CSV /config/ip_to_country.csv
+
+# Fourth directory is for the stat collection
+WORKDIR /stat
+
+# Last directory is for the application
+WORKDIR /app
+
+# Copy the python and bash scripts
+COPY start.sh /app/
+COPY flask_api.py /app/
+COPY setup.py /app/
+COPY states.py /app/
+COPY monitor.py /app/
+COPY ml_util.py /app/
+COPY ml_analysis.py /app/
+COPY rb_analysis.py /app/
+COPY aggregator.py /app/
+COPY kisshome_ids.py /app/
+
+RUN chmod a+x /app/start.sh
+RUN chmod a+x /app/flask_api.py
+RUN chmod a+x /app/setup.py
+RUN chmod a+x /app/states.py
+RUN chmod a+x /app/monitor.py
+RUN chmod a+x /app/ml_util.py
+RUN chmod a+x /app/ml_analysis.py
+RUN chmod a+x /app/rb_analysis.py
+RUN chmod a+x /app/aggregator.py
+RUN chmod a+x /app/kisshome_ids.py
+
+# Open port 5000 for the API
+EXPOSE 5000
+
+# Set the entry point
+ENTRYPOINT ["/app/start.sh"]
