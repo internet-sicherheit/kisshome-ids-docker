@@ -18,8 +18,8 @@ $ sudo docker buildx create --use --name multiarch_builder
 To publish the build, run
 
 ```bash
-$ sudo docker buildx build -f Dockerfile-base --platform linux/amd64,linux/arm64 -t dgrossenbach/ids:base --push .
-$ sudo docker buildx build -f Dockerfile-stable --platform linux/amd64,linux/arm64 -t dgrossenbach/ids:stable --push .
+$ sudo docker buildx build -f Dockerfile-base --platform linux/amd64,linux/arm64 -t kisshome/ids:base --push .
+$ sudo docker buildx build -f Dockerfile-stable --platform linux/amd64,linux/arm64 -t kisshome/ids:stable --push .
 ```
 
 To debug the output of docker it is recommended to use the `--progress=plain` flag.
