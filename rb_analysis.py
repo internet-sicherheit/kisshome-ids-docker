@@ -105,6 +105,10 @@ def rb_start_daemon(rb_logger):
         # Only start when there is no suricata process running by checking for a .pid file
         daemon_pid_file = "/var/run/suricata.pid"
         if not os.path.exists(daemon_pid_file):
+            # Remove leftovers like old sockets
+            global RB_SOCKET
+            if os.path.exists(RB_SOCKET):
+                os.remove(RB_SOCKET)
             # Prepare rules for the initial startup
             if rb_prepare_rules():
                 cmd = f"suricata -c /config/suricata.yaml --unix-socket -D"
@@ -120,7 +124,6 @@ def rb_start_daemon(rb_logger):
                         # Use the file provided in the .yaml
                         with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "r") as log_file:
                             for log_line in log_file.readlines():
-                                global RB_SOCKET
                                 if "unix socket" in log_line:
                                     socket = str(log_line).split("'")[1] # Parse socket name from line
                                     if RB_SOCKET != socket:

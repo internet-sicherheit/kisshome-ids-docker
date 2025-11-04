@@ -74,7 +74,7 @@ logger.propagate = False
 setproctitle.setproctitle(__file__)
 
 # Version
-VERSION = "1.5.1"
+VERSION = "1.5.3"
 
 # For pcap check
 PCAP_MAGIC_NUMBERS = {
@@ -104,7 +104,7 @@ def configure_app(flask_app):
     flask_app.config['RESTX_VALIDATE'] = True
     flask_app.config['RESTX_MASK_SWAGGER'] = False
     flask_app.config['ERROR_404_HELP'] = True  # False in prod
-    logger.info(f"Start Flask API")
+    logger.info(f"Start Flask API with version {VERSION}")
 
 
 # Configure API
@@ -173,8 +173,8 @@ class Status(Resource):
                         logname = os.path.basename(logfile)
                         with open(logfile, "r", encoding="utf-8") as log:
                             logs[logname] = log.read()
-                    # Compress with gzip
-                    error_logs = {"base64_gzip_logs": base64.b64encode(gzip.compress(json.dumps(logs).encode("utf-8"))).decode("utf-8")}
+                    # Compress with gzip and base64 + send logs
+                    error_logs = {VERSION: base64.b64encode(gzip.compress(json.dumps(logs).encode("utf-8"))).decode("utf-8")}
                     logs_send = True
             else:
                 # Ensure logs_send is False when other states are present
@@ -241,6 +241,13 @@ class Configuration(Resource):
                 save_threshold_seconds = args.get('save_threshold_seconds')
                 allow_training = args.get('allow_training')
 
+                old_state = get_state()
+
+                # Don't override errors
+                if not ERROR in get_state():
+                    # Set state to prevent sending files via /pcap until it is done
+                    set_state(CONFIGURING)
+
                 # Update config
                 ids.update_configuration(callback_url=callback_url, save_threshold_seconds=save_threshold_seconds, allow_training=allow_training)
                 
@@ -254,11 +261,6 @@ class Configuration(Resource):
                 else:
                     return {"result": "Failed", "message": "Invalid content type"}, 415
 
-                current_state = get_state()
-
-                # Set state to prevent sending files via /pcap until it is done
-                set_state(CONFIGURING)
-
                 # Write meta_json directly to disk
                 with open(ids.meta_json, "w") as meta_file:
                     if os.path.exists(ids.meta_json):
@@ -266,12 +268,15 @@ class Configuration(Resource):
                         meta_file.write("")
                     json.dump(meta_data, meta_file)
                 
-                if ANALYZING in current_state:
+                # Keep an eye on race conditions: Can be RUNNING by aggregator, handle
+                if ANALYZING in old_state and CONFIGURING in get_state(): # Cannot be error
                     # Set state back to analyzing
                     set_state(ANALYZING)
                 else:
-                    # Set state to running now
-                    set_state(RUNNING)
+                    # Don't override errors
+                    if not ERROR in get_state():
+                        # Set state to running now
+                        set_state(RUNNING)
 
                 logger.debug(f"New configuration: {callback_url=}, {save_threshold_seconds=}, {allow_training=}, {meta_json=}")
                 logger.info("New configuration applied successfully")
@@ -330,8 +335,10 @@ class Pcap(Resource):
                 if not (magic_bytes in PCAP_MAGIC_NUMBERS or magic_bytes == PCAPNG_MAGIC_NUMBER):
                     return {"result": "Failed", "message": "Received invalid pcap data"}, 400
                 
-                # Set new state to prevent other calls on /pcap
-                set_state(ANALYZING)
+                # Don't override errors
+                if not ERROR in get_state():
+                    # Set new state to prevent other calls on /pcap
+                    set_state(ANALYZING)
 
                 # Start aggregation before analysis to enable reading pipes first
                 ids.start_aggregation()

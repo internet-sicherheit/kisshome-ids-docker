@@ -72,6 +72,7 @@ import shutil
 import signal
 import logging
 import hashlib
+import traceback
 from logging.handlers import TimedRotatingFileHandler
 import argparse
 import struct
@@ -1248,6 +1249,7 @@ def extract_pcap_infos(pcap: dpkt.pcap.Reader, devices: Set[str]) -> Tuple[Dict[
     packet_count = 0
     pcap_size = 0
 
+    # Initialize with an empty dictionary for each device, so we always have a result for each device
     device_statistics = {mac_str: {"external_ips": {}, "data_volume": {"packet_count": 0, "data_volume_bytes": 0}} for mac_str in devices}
     device_packets = {mac_str: [] for mac_str in devices}
 
@@ -1423,8 +1425,17 @@ def extract_pcap_infos(pcap: dpkt.pcap.Reader, devices: Set[str]) -> Tuple[Dict[
         "devices": formatted_device_statistics
     }
 
-    logger.info(f"\nDone reading in pcap with {packet_count} packets. \n Avg time per packet: {(time.time() - start_time) / packet_count:.6f}s")
-    
+    if packet_count > 0:
+        logger.info(f"\nDone reading in pcap with {packet_count} packets. \n Avg time per packet: {(time.time() - start_time) / packet_count:.6f}s")
+    else:
+        error_message = f"Pcap read in successfuly, but "
+        if error_count > 0:
+            error_message += f"no valid packets found in pcap. {error_count} errors occurred."
+        else:
+            error_message += f"0 packets found in pcap."
+
+        raise ValueError(error_message)
+
     return device_packets, pcap_statistics
 
 ########################################
@@ -1443,7 +1454,7 @@ CSV_DTYPE = {"flowid": int,
              "src_port": "int32", 
              "dst_port": "int32", 
              "ip_ttl": "int16", 
-             "tcp_flags": "Int8", 
+             "tcp_flags": "UInt8", 
              "is_outgoing": "bool", 
              "is_tcp": "bool", 
              "is_global": "bool", 
@@ -2594,21 +2605,29 @@ def create_device_report(device_mac_key: str, action: Literal[ACTION_INFER, ACTI
 def translate_result_to_janniklas(device_report: Dict[str, Any]) -> Dict[str, Any]:
     """
     """
-    action = device_report["action"]
-    if action == ACTION_INFER:
-        num_anomalies = device_report["num_anomalies"]
-        if num_anomalies > 0:
-            r_type = "Alert"
-            description = f"{num_anomalies} Anomalies detected"
-            randomized_score = round(random.uniform(JANNIKLAS_THRESHOLD, JANNIKLAS_THRESHOLD2), 2)
+    # Error case
+    if "error" in device_report:
+        r_type = "Normal"
+        description = "Error occured" # device_report["error"] is the error message, but might contain whole worker log, too long?
+        randomized_score = 0
+
+    # Normal case
+    else:
+        action = device_report["action"]
+        if action == ACTION_INFER:
+            num_anomalies = device_report["num_anomalies"]
+            if num_anomalies > 0:
+                r_type = "Alert"
+                description = f"{num_anomalies} Anomalies detected"
+                randomized_score = round(random.uniform(JANNIKLAS_THRESHOLD, JANNIKLAS_THRESHOLD2), 2)
+            else:
+                r_type = "Normal"
+                description = "No Anomalies detected"
+                randomized_score = round(random.uniform(0, JANNIKLAS_THRESHOLD - 0.01), 2)
         else:
             r_type = "Normal"
-            description = "No Anomalies detected"
-            randomized_score = round(random.uniform(0, JANNIKLAS_THRESHOLD - 0.01), 2)
-    else:
-        r_type = "Normal"
-        description = ""
-        randomized_score = 0
+            description = ""
+            randomized_score = 0
     
     jan_niklas_report = {
         **device_report,
@@ -2632,6 +2651,16 @@ def flush_results(out_pipe: str, device_results: Dict[str, Any], pcap_statistics
     with open(out_pipe, "w") as fw:
         fw.write(result_text)
 
+def flush_error(out_pipe: str, error_msg: str) -> None:
+    """
+    """
+    error_result = {
+        "error": error_msg
+    }
+    error_result_text = json.dumps(error_result, indent=4)
+    with open(out_pipe, "w") as fw:
+        fw.write(error_result_text)
+
 def assert_enough_packets(packet_rows: List[List[Any]]) -> bool:
     """
     Check if the packet rows have enough packets to build a window.
@@ -2648,15 +2677,12 @@ def ml_analysis_loop(pcap_in_pipe: str, out_pipe: str, training_enabled: bool, t
     """
     logger.info(f"Starting ml_analysis_loop")
 
-    # We track the number of non-successful so a restart can be triggered after a certain number of errors.
+    # We track the number of non-successful runs so a restart can be triggered after a certain number of errors.
     # Successful runs decrease the error count.
-    error_count = 0
+    faulty_pcap_count = 0
 
     # Run forever: wait on pcap pipe
     while True:
-        # If the error count exceeds the saving grace, raise an exception to initiate a restart.
-        if error_count >= SAVING_GRACE:
-            raise Exception(f"Too many consecutive errors occurred, raising to intiaite restart. If encountered again, review the logs.")
 
         logger.info("Waiting for next pcap on %s ...", pcap_in_pipe)
         # If any unallowed errors occur, the run is considered failed.
@@ -2671,18 +2697,18 @@ def ml_analysis_loop(pcap_in_pipe: str, out_pipe: str, training_enabled: bool, t
                     pcap_reader = dpkt.pcap.Reader(fifo)
                     device_packets, pcap_statistics = extract_pcap_infos(pcap_reader, devices)
                     logger.debug(f"Pcap parsed in {time.time() - start_wall:.6f}s")
+            except ValueError as e:
+                logger.exception(f"Error reading pcap: {e}")
+                raise
             except dpkt.NeedData as e:
                 logger.exception(f"NeedData: empty or truncated pcap {e}")
-                run_failed = True
-                continue
+                raise
             except dpkt.UnpackError as e:
                 logger.exception(f"Pcap parse error - invalid or corrupted pcap {e}")
-                run_failed = True
-                continue
+                raise
             except Exception as e:
                 logger.exception(f"Unknown error parsing pcap: {e}")
-                run_failed = True
-                continue
+                raise
 
             current_progress = load_and_validate_training_status_json(progress_json_path)
 
@@ -2849,14 +2875,16 @@ def ml_analysis_loop(pcap_in_pipe: str, out_pipe: str, training_enabled: bool, t
             jan_niklas_reports = {mac_key: translate_result_to_janniklas(report) for mac_key, report in device_results.items()}
             flush_results(out_pipe, jan_niklas_reports, pcap_statistics, analysis_ms)
 
-            if run_failed:
-                error_count += 1
-            else:
-                error_count = max(error_count - 1, 0)
+            faulty_pcap_count = max(faulty_pcap_count - 1, 0)
             
         except Exception as e:
             logger.exception("Top-level loop error: %s", e)
-            error_count += 1
+            flush_error(out_pipe, traceback.format_exc())
+
+            # If too many consecutive pcaps cannot be processed, set the state to ERROR to initiate a restart.
+            if faulty_pcap_count >= SAVING_GRACE:
+                set_state(ERROR)
+                raise Exception(f"Too many consecutive pcaps could not be processed, raising to intiaite restart. Please review the logs.")
             # brief backoff to avoid tight error loop
             time.sleep(3.0)
 
@@ -2955,7 +2983,7 @@ def testmain():
         os.mkfifo(in_pipe, 0o666)
         logger.info(f"Created FIFO: {in_pipe}")
 
-        ml_analyze(logger, in_pipe, args.out_pipe, args.devices_json, args.training_enabled, args.progress_json)
+    ml_analyze(logger, in_pipe, args.out_pipe, args.devices_json, args.training_enabled, args.progress_json)
 
 if __name__ == "__main__":
     # Main is for testing only. Real entry point is ml_analyze()

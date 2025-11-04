@@ -1,0 +1,46 @@
+{
+    "detections": {
+        "34-98-7a-49-2c-84": { // five different cases: collect, infer, train, error, none. infer train collect and error always have unique attributes
+            "action": "TRAIN",
+            "threshold": 0.0014652014652014652,
+            "model_base64": "UEsDBAAACAgAAAAAAAAAAAAAAAAAAAAAAAAaAAgAMzQtOTgtN2EtNDktMmMtODQvZGF0YS5wa2xGQg...abgeschnitten", // model file as binary format base64 - maybe we dont want to save whole model binary to DB but save the file and just have the (unique!) timestamp here?
+            "type": "Normal", // field always present
+            "description": "", // field always present
+            "score": 0 // field always present
+        },
+        "c8-2e-18-0d-92-00": {
+            "action": "COLLECT",
+            "dataset_size": 4364,
+            "progress": 0.94,
+            "status_description": "Device used too rarely",
+            "distinct_hour_buckets": [ //List of int
+                489335
+            ],
+            "distinct_day_buckets": [
+                20388
+            ],
+            "type": "Normal",
+            "description": "",
+            "score": 0
+        },
+        "c8-2e-18-08-5e-74": { // error case: can happen for any action, in the error case only the three must haves +  error is given
+            "action": "TRAIN",
+            "error": "2025-10-28 00:39:58 [INFO] worker:c8-2e-18-08-5e-74: Worker: Starting task action=TRAIN for device c8-2e-18-08-5e-74\n2025-10-28 00:39:58 [ERROR] worker:c8-2e-18-08-5e-74: Worker task failed: FileNotFoundError: [Errno 2] No such file or directory: '/shared/ml/datasets/c8-2e-18-08-5e-74.csv.gz'\nTraceback (most recent call last):\n  File \"/home/sofie/Desktop/kisshome/demonstrator/docker/ml_analysis.py\", line 1970, in _worker_handle_task\n    full_dataset = load_dataset(task.device_mac_key)\n  File \"/home/sofie/Desktop/kisshome/demonstrator/docker/ml_analysis.py\", line 664, in load_dataset\n    with gzip.open(path, \"rt\", newline=\"\") as f:\n  File \"/usr/lib/python3.10/gzip.py\", line 58, in open\n    binary_file = GzipFile(filename, gz_mode, compresslevel)\n  File \"/usr/lib/python3.10/gzip.py\", line 174, in __init__\n    fileobj = self.myfileobj = builtins.open(filename, mode or 'rb')\nFileNotFoundError: [Errno 2] No such file or directory: '/shared/ml/datasets/c8-2e-18-08-5e-74.csv.gz'",
+            "type": "Normal",
+            "description": "",
+            "score": 0.0
+        },
+        "e4-65-b8-41-81-b8": { // This is a None result - here no entry should be created in the database (the case where before we looked for score = 0)
+            "type": "Normal",
+            "description": "",
+            "score": 0.0
+        },
+        "ec-da-3b-c6-6c-88": {
+            "action": "INFER",
+            "num_anomalies": 0,
+            "type": "Normal",
+            "description": "No Anomalies detected",
+            "score": 49.45
+        },
+    }
+}

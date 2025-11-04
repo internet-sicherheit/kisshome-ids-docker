@@ -98,7 +98,7 @@ def start_monitoring(interval=1, timeout=None):
     iostat_fd = open(os.path.join(SYSSTAT_DIRECTORY, "iostat.json"), "w")
     PROCESSES.append((subprocess.Popen(shlex.split(iostat_cmd), stdout=iostat_fd), iostat_fd))
 
-    pidstat_cmd = f"pidstat -p ALL {interval} -o JSON"
+    pidstat_cmd = f"pidstat -l -p ALL {interval} -o JSON"
     pidstat_fd = open(os.path.join(SYSSTAT_DIRECTORY, "pidstat.json"), "w")
     PROCESSES.append((subprocess.Popen(shlex.split(pidstat_cmd), stdout=pidstat_fd), pidstat_fd))
 
@@ -149,7 +149,7 @@ def stop_monitoring():
 
     if os.path.exists(sarbin):
         # Parse sar binary to json with sadf
-        sadf_process = subprocess.run(sadf_cmd,shell=True)
+        sadf_process = subprocess.run(sadf_cmd, shell=True)
         if sadf_process.returncode != 0:
             # Something went wrong
             raise Exception(sadf_process) 

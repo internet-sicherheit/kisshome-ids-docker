@@ -254,7 +254,7 @@ def aggregate_pipes(rb_pipe_dict, ml_pipe_dict, known_macs):
         else:
             new_ml_detection = {
                 "type": "Normal",
-                "description": "",
+                "description": "No data",
                 "score": 0
                 } 
             detection["ml"] = new_ml_detection
@@ -371,49 +371,62 @@ def aggregate(aggregator_logger, rb_result_pipe, ml_result_pipe, callback_url, s
                 # In case the timeout is not reached, stop the monitoring
                 stop_monitoring()
 
-                # Get current macs from meta.json
-                current_macs = []
-                with open(META_JSON, "r") as meta_file:
-                    current_macs = json.load(meta_file).keys()
+                # Parse pipes to dict
+                rb_data = dict(literal_eval(rb_pipe.read().strip()))
+                ml_data = dict(literal_eval(ml_pipe.read().strip()))
 
-                head = {"file": pcap_name, 
-                        "time": datetime.now(timezone.utc).isoformat(), 
-                        "result": {"status": "success"}
-                        }
+                # Check if the (ml) pipe data is ok since it interprets the send pcap (Error cases like no valid packets)
+                if "error" in ml_data.keys():
+                    head = {"file": pcap_name, 
+                            "time": datetime.now(timezone.utc).isoformat(), 
+                            "result": {"status": "error", "message": ml_data["error"]}
+                            }
+                    
+                    results = {**head}
+                    send_results(results, callback_url)
 
-                pipe_data = aggregate_pipes(dict(literal_eval(rb_pipe.read().strip())), dict(literal_eval(ml_pipe.read().strip())), current_macs)
-                
-                config = {"config": {"callback_url": "", "save_threshold_seconds": "", "allow_training": False, "meta_json": {}}}
-                config["config"]["callback_url"] = callback_url
-                config["config"]["save_threshold_seconds"] = save_threshold_seconds
-                config["config"]["allow_training"] = allow_training
-                if os.path.exists(META_JSON):
+                else:
+                    # Get current macs from meta.json
+                    current_macs = []
                     with open(META_JSON, "r") as meta_file:
-                        config["config"]["meta_json"] = json.load(meta_file)
+                        current_macs = json.load(meta_file).keys()
 
-                suricata_telemetry = {"suricata_telemetry": {}}
-                suricata_telemetry["suricata_telemetry"] = collect_suricata_telemetry()
+                    head = {"file": pcap_name, 
+                            "time": datetime.now(timezone.utc).isoformat(), 
+                            "result": {"status": "success", "message": ""}
+                            }
+                    
+                    pipe_data = aggregate_pipes(rb_data, ml_data, current_macs)
 
-                hardware = {"hardware": {}}
-                hardware["hardware"] = collect_hardware()
-                
-                monitor_data = {"monitor": {}}
-                monitor_data["monitor"]["load"] = collect_monitor_data()
+                    config = {"config": {"callback_url": "", "save_threshold_seconds": "", "allow_training": False, "meta_json": {}}}
+                    config["config"]["callback_url"] = callback_url
+                    config["config"]["save_threshold_seconds"] = save_threshold_seconds
+                    config["config"]["allow_training"] = allow_training
+                    if os.path.exists(META_JSON):
+                        with open(META_JSON, "r") as meta_file:
+                            config["config"]["meta_json"] = json.load(meta_file)
 
-                # Wait a little
-                time.sleep(1)
+                    suricata_telemetry = {"suricata_telemetry": {}}
+                    suricata_telemetry["suricata_telemetry"] = collect_suricata_telemetry()
 
-                # Start idle monitoring for max. 10 seconds
-                start_monitoring(timeout=10)
-                time.sleep(10)
-                stop_monitoring()
+                    hardware = {"hardware": {}}
+                    hardware["hardware"] = collect_hardware()
+                    
+                    monitor_data = {"monitor": {}}
+                    monitor_data["monitor"]["load"] = collect_monitor_data()
 
-                monitor_data["monitor"]["idle"] = collect_monitor_data()
-                
-                results = {**head, **pipe_data, **config, **suricata_telemetry, **hardware, **monitor_data}
-                send_results(results, callback_url)
+                    # Start idle monitoring for max. 10 seconds
+                    start_monitoring(timeout=10)
+                    # Sleep a little longer (max. 5 seconds) and stop manually if neccessary (race condition with start_monitoring possible)  
+                    time.sleep(15)
+                    stop_monitoring()
 
-                if get_state() == ANALYZING:
+                    monitor_data["monitor"]["idle"] = collect_monitor_data()
+                    
+                    results = {**head, **pipe_data, **config, **suricata_telemetry, **hardware, **monitor_data}
+                    send_results(results, callback_url)
+
+                if ANALYZING in get_state():
                     # Set new state since analysis is done
                     set_state(RUNNING)
 
