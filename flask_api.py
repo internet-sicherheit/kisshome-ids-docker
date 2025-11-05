@@ -74,7 +74,7 @@ logger.propagate = False
 setproctitle.setproctitle(__file__)
 
 # Version
-VERSION = "1.5.4"
+VERSION = "1.5.5"
 
 # For pcap check
 PCAP_MAGIC_NUMBERS = {
@@ -169,10 +169,10 @@ class Status(Resource):
             if ERROR in get_state():
                 if not logs_send:
                     logs = {}
-                    for logfile in glob.glob(os.path.join(LOG_DIR, "*")):
+                    for logfile in glob.glob(os.path.join(LOG_DIR, "*.log")): # No old logs
                         logname = os.path.basename(logfile)
                         with open(logfile, "r", encoding="utf-8") as log:
-                            logs[logname] = log.read()
+                            logs[logname] = "\n".join(log.readlines()[-5000:]) # Only read the last 5000 lines to keep it reasonable
                     # Compress with gzip and base64 + send logs
                     error_logs = {VERSION: base64.b64encode(gzip.compress(json.dumps(logs).encode("utf-8"))).decode("utf-8")}
                     logs_send = True

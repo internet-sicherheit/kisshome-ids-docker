@@ -29,3 +29,9 @@ First stable version released for study
 ### Changes
 
 * Handle Suricata daemon start more gracefully by testing the command socket 5 times before raising an error
+
+## 1.5.5 (05-11-2025)
+
+### Changes
+
+* Change error report by sending only the last 5000 lines of each current used logfile instead of the whole content
