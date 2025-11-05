@@ -82,6 +82,8 @@ SURICATA_YAML_DIRECTORY = "/var/log/suricata"
 RB_SOCKET = "/var/run/suricata/suricata-command.socket"
 # Path to meta.json
 META_JSON = None
+# Attempts before throwing an error
+MAX_RETRIES = 5
 
 
 logger = None 
@@ -89,7 +91,7 @@ logger = None
 
 def rb_start_daemon(rb_logger):
     """
-    Start suricata by using its daemon feature
+    Start Suricata by using its daemon feature
     
     @param rb_logger: logger for logging
     @return: nothing
@@ -105,12 +107,12 @@ def rb_start_daemon(rb_logger):
         # Only start when there is no suricata process running by checking for a .pid file
         daemon_pid_file = "/var/run/suricata.pid"
         if not os.path.exists(daemon_pid_file):
-            # Remove leftovers like old sockets
-            global RB_SOCKET
-            if os.path.exists(RB_SOCKET):
-                os.remove(RB_SOCKET)
             # Prepare rules for the initial startup
             if rb_prepare_rules():
+                # Remove leftovers like old sockets
+                global RB_SOCKET
+                if os.path.exists(RB_SOCKET):
+                    os.remove(RB_SOCKET)
                 cmd = f"suricata -c /config/suricata.yaml --unix-socket -D"
                 logger.debug(f"Invoking Suricata daemon with {cmd=}")
                 suricatad_process = subprocess.run(cmd, capture_output=True, shell=True)
@@ -157,15 +159,44 @@ def rb_start_daemon(rb_logger):
             finally:
                 os.remove(daemon_pid_file)
                 logger.info(f"Killed and removed existing Suricata daemon process with pid={daemon_pid}, start new daemon")
+                # Restart daemon
                 rb_start_daemon(rb_logger)      
     except Exception as e:
         set_state(ERROR)
         logger.exception(f"Could not start Suricata daemon: {e}")
 
 
+def rb_test_daemon(rb_logger):
+    """
+    Test Suricata daemon by sending the version command 
+    
+    @param rb_logger: logger for logging
+    @return: nothing
+    """
+    # Test daemon
+    global MAX_RETRIES
+    cmd = f"suricatasc {RB_SOCKET} -c version"
+    logger.debug(f"Invoking Suricatasc with {cmd=}")
+    suricatasc_process = subprocess.run(cmd, capture_output=True, shell=True)
+    if suricatasc_process.returncode != 0:
+        # Something went wrong
+        if MAX_RETRIES > 0:
+            logger.warning(f"Suricatasc process had a non zero exit code: {suricatasc_process}")
+            MAX_RETRIES = MAX_RETRIES - 1
+            logger.info(f"Try to restart Suricata daemon, retries left: {MAX_RETRIES}")
+            # Restart daemon
+            rb_start_daemon(rb_logger)
+        else:
+            logger.error(f"Suricatasc process had a non zero exit code: {suricatasc_process}")
+            raise Exception(suricatasc_process)
+    logger.info(f"Suricata daemon test successful: {suricatasc_process}")
+    # Reset retries
+    MAX_RETRIES = 5
+
+
 def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
     """
-    Analyze the network flow with rules from suricata
+    Analyze the network flow with rules from Suricata
     
     @param rb_logger: logger for logging
     @param rb_pcap_pipe_path: path to the pipe with the .pcap content
@@ -199,6 +230,9 @@ def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
             schedule.run_pending()
             # Blocks until the writer has finished its job
             with open(rb_pcap_pipe_path, "rb") as rb_pcap_pipe:
+                # First test if the socket of the daemon is working
+                rb_test_daemon(rb_logger)
+                # Start time
                 start_time = time.time()
                 # Write the data to a tempfile since suricatasc cannot process streams
                 temp_pcap = None
@@ -282,7 +316,7 @@ def rb_filter_results(eve_json, duration):
     Filter all valid alerts in the eve.json file
 
     @param eve_json: json string with the content of the eve.json file
-    @param duration: the time the suricata engine needed for the analysis in seconds
+    @param duration: the time the Suricata engine needed for the analysis in seconds
     @return: all valid alerts as a dictionary
     """
     # Structure:
@@ -352,7 +386,7 @@ def rb_check_mac(alert_mac_adresses):
 
 def rb_prepare_rules():
     """
-    Prepare the rules for suricata by disabling some rules, e.g. for windows environment
+    Prepare the rules for Suricata by disabling some rules, e.g. for windows environment
 
     @return: bool if preparing was successful
     """
@@ -381,7 +415,7 @@ def rb_prepare_rules():
 
 def rb_count_rules():
     """
-    Count all active rules used by suricata
+    Count all active rules used by Suricata
 
     @return: count as an integer
     """

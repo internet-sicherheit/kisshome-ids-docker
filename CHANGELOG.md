@@ -23,3 +23,9 @@ First stable version released for study
 * Fixed a bug when caused by dividing with 0 in a log message
 * Resolved a possible race condition when monitoring with a thread by increasing sleep to 15 seconds (from 10)
 * Fixed a bug in monitor.py to display the full cmd of the process using pidstat by using the -l flag 
+
+## 1.5.4 (05-11-2025)
+
+### Changes
+
+* Handle Suricata daemon start more gracefully by testing the command socket 5 times before raising an error

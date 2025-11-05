@@ -79,14 +79,6 @@ $ cat /path/to/file.pcap | curl -X POST -H "Content-Type: application/octet-stre
 
 To read the full API doc, visit http://localhost:5000/
 
-## Demo
-
-To run a demo server, you can use the preinstalled `docker0` bridge to host an own, little API. Run
-
-```bash
-$ python3 /extras/test_api/demo_api.py
-```
-
 ## License
 
 MIT License
