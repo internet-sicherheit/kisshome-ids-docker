@@ -132,7 +132,7 @@ def rb_start_daemon(rb_logger):
                                         RB_SOCKET = socket
                                     logger.debug(f"Socket created at: {RB_SOCKET}")
                                 if "Engine started" in log_line:
-                                    is_ready = True # daemon has created socket and started engine
+                                    is_ready = True # Daemon has created socket and started engine
                                     break
                     logger.info(f"Suricata daemon started: {suricatad_process}")
             else:
@@ -186,7 +186,11 @@ def rb_test_daemon(rb_logger):
             logger.info(f"Try to restart Suricata daemon, retries left: {MAX_RETRIES}")
             # Restart daemon
             rb_start_daemon(rb_logger)
+            # Test again
+            rb_test_daemon(rb_logger)
         else:
+            # Reset retries
+            MAX_RETRIES = 5
             logger.error(f"Suricatasc process had a non zero exit code: {suricatasc_process}")
             raise Exception(suricatasc_process)
     logger.info(f"Suricata daemon test successful: {suricatasc_process}")
@@ -228,10 +232,10 @@ def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
         while True:
             # Check if the scheduled job needs to be executed
             schedule.run_pending()
+            # Test if the socket of the daemon is working
+            rb_test_daemon(rb_logger)
             # Blocks until the writer has finished its job
             with open(rb_pcap_pipe_path, "rb") as rb_pcap_pipe:
-                # First test if the socket of the daemon is working
-                rb_test_daemon(rb_logger)
                 # Start time
                 start_time = time.time()
                 # Write the data to a tempfile since suricatasc cannot process streams
