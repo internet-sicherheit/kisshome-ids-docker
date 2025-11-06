@@ -35,3 +35,10 @@ First stable version released for study
 ### Changes
 
 * Change error report by sending only the last 5000 lines of each current used logfile instead of the whole content
+
+## 1.5.6 (06-11-2025)
+
+### Changes
+
+* Fix blacklisting in suricata to prevent false Malware detections like `ET P2P Vuze BT UDP Connection`
+
