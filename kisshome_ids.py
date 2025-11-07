@@ -118,8 +118,12 @@ class KisshomeIDS:
         self.configure_analysis()
         self.configure_aggregation()
 
-        # Start daemon for the rb component
-        rb_start_daemon(self.rb_logger)
+        try:
+            # Start daemon for the rb component
+            rb_start_daemon(self.rb_logger)
+        except Exception as e:
+            self.logger.exception(e)
+            set_state(ERROR)
 
         # Set IDS started
         set_state(STARTED)

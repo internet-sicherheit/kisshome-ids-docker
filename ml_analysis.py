@@ -2964,6 +2964,7 @@ def ml_analyze(ml_logger: object, pcap_in_pipe: str,out_pipe: str,devices_json_p
         ml_analysis_loop(pcap_in_pipe, out_pipe, training_enabled, task_carryovers, executor, devices, progress_json_path)   
 
     except Exception as e:
+        logger.exception(e)
         set_state(ERROR)
         raise e
 

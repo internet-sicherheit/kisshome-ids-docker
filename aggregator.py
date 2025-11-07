@@ -402,6 +402,7 @@ def aggregate(aggregator_logger, rb_result_pipe, ml_result_pipe, callback_url, s
                     global MAX_ERRORS
                     MAX_ERRORS = MAX_ERRORS - 1
                     if MAX_ERRORS == 0:
+                        logger.exception(f"Got maximum allowed errors, errors left: {MAX_ERRORS}")
                         set_state(ERROR)
                         MAX_ERRORS = 3
 
