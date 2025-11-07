@@ -74,7 +74,7 @@ logger.propagate = False
 setproctitle.setproctitle(__file__)
 
 # Version
-VERSION = "1.5.7"
+VERSION = "1.5.8"
 
 # For pcap check
 PCAP_MAGIC_NUMBERS = {
@@ -208,6 +208,7 @@ class Status(Resource):
             logger.info("Returned current status successfully")
             return {"result": "Success", "message": message}, 200
         except Exception as e:
+            logger.exception(f"API error: {e}")
             set_state(ERROR)
             return {"result": "Failed", "message": str(e)}, 500
 
@@ -283,6 +284,7 @@ class Configuration(Resource):
 
                 return {"result": "Success", "message": "Configuration set"}, 200
             except Exception as e:
+                logger.exception(f"API error: {e}")
                 set_state(ERROR)
                 return {"result": "Failed", "message": str(e)}, 500
         
@@ -343,7 +345,9 @@ class Pcap(Resource):
                 # Start aggregation before analysis to enable reading pipes first
                 ids.start_aggregation()
                 time.sleep(1)
+
                 ids.start_analysis()
+                time.sleep(1)
 
                 # Lock in case of successive pcaps being sent too fast synchronously
                 with pipe_lock:
@@ -364,6 +368,7 @@ class Pcap(Resource):
 
                 return {"result": "Success", "message": f"Pcap {pcap_name} received, start {ENV_NAME}"}, 200
             except Exception as e:
+                logger.exception(f"API error: {e}")
                 set_state(ERROR)
                 return {"result": "Failed", "message": str(e)}, 500
         

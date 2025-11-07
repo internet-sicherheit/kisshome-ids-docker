@@ -110,7 +110,8 @@ def start_monitoring(interval=1, timeout=None):
         stop_monitoring()
 
     if timeout:
-        TIMER = threading.Timer(timeout, stop).start()
+        TIMER = threading.Timer(timeout, stop)
+        TIMER.start()
 
 
 def stop_monitoring():
@@ -123,7 +124,9 @@ def stop_monitoring():
     global TIMER
     
     # Reset timer
-    TIMER = None
+    if TIMER:
+        TIMER.cancel()
+        TIMER = None
 
     # Use sadf as frontend to the sar 
     sarbin = f"{SYSSTAT_DIRECTORY}/sar"

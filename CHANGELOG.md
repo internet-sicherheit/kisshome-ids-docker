@@ -51,3 +51,10 @@ First stable version released for study
 * Rework ERROR state: ml and rb remove the ability to set it themselves, instead only the aggregator decides when the state is set
 * Allow 3 written errors either from ml or rb before setting IDS into error state
 
+## 1.5.8 (07-11-2025)
+
+### Changes
+
+* Fixed a bug with dpkt closing the pipe leading to an error in the API (reader close on fifo pipe)
+* Switch state gracefully in aggregator
+* Remove long sleep of 3 seconds in ml

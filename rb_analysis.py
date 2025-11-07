@@ -38,6 +38,7 @@ import tempfile
 import schedule
 import psutil
 import signal
+import traceback
 
 from logging.handlers import TimedRotatingFileHandler
 
@@ -292,7 +293,8 @@ def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
             logger.info(f"Suricata analysis done, waiting for next pcap...")
     except Exception as e:
         # Exit gracefully by notifying the aggregator
-        message = {"error": e}
+        logger.exception(f"Suricata error: {e}")
+        message = {"error": traceback.format_exc()}
         rb_flush_results(rb_result_pipe_path, message)
 
 

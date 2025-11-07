@@ -122,7 +122,7 @@ class KisshomeIDS:
             # Start daemon for the rb component
             rb_start_daemon(self.rb_logger)
         except Exception as e:
-            self.logger.exception(e)
+            self.logger.exception(f"IDS error: {e}")
             set_state(ERROR)
 
         # Set IDS started
@@ -191,7 +191,7 @@ class KisshomeIDS:
             self.logger.debug(f"{rb_process=}, {ml_process=}")
             self.logger.info("Analysis configured")
         except Exception as e:
-            self.logger.exception(e)
+            self.logger.exception(f"IDS error: {e}")
             set_state(ERROR)
 
     def configure_aggregation(self):
@@ -208,7 +208,7 @@ class KisshomeIDS:
             self.logger.debug(f"{aggregate_process=}")
             self.logger.info("Aggregation configured")
         except Exception as e:
-            self.logger.exception(e)
+            self.logger.exception(f"IDS error: {e}")
             set_state(ERROR)
 
     def start_analysis(self):
@@ -226,7 +226,7 @@ class KisshomeIDS:
             self.logger.debug(f"{analysis_process=}")
             self.logger.info("Analysis started")
         except Exception as e:
-            self.logger.exception(e)
+            self.logger.exception(f"IDS error: {e}")
             set_state(ERROR)
 
     def start_aggregation(self):
@@ -244,7 +244,7 @@ class KisshomeIDS:
             self.logger.debug(f"{aggregation_process=}")
             self.logger.info("Aggregation started")
         except Exception as e:
-            self.logger.exception(e)
+            self.logger.exception(f"IDS error: {e}")
             set_state(ERROR)
 
     def stop_analysis(self):
@@ -266,7 +266,7 @@ class KisshomeIDS:
 
             self.logger.info("Analysis stopped")
         except Exception as e:
-            self.logger.exception(e)
+            self.logger.exception(f"IDS error: {e}")
             set_state(ERROR)
                 
     def stop_aggregation(self):
@@ -288,5 +288,5 @@ class KisshomeIDS:
 
             self.logger.info("Aggregation stopped")
         except Exception as e:
-            self.logger.exception(e)
+            self.logger.exception(f"IDS error: {e}")
             set_state(ERROR)

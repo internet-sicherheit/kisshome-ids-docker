@@ -1224,7 +1224,6 @@ def get_country(ip_int: int) -> str:
         start_int, end_int, country = ip_to_country_ranges[idx]
         return country if start_int <= ip_int <= end_int else default_country_value
     except Exception:
-        #set_state(EXITED)
         logger.exception("Country lookup error for ip_int=%s", ip_int)
         raise
 
@@ -1273,7 +1272,7 @@ def extract_pcap_infos(pcap: dpkt.pcap.Reader, devices: Set[str]) -> Tuple[Dict[
         total_packet_count += 1
 
         if total_packet_count >= MIN_PACKET_COUNT_FOR_ERROR_CHECK and error_count / max(total_packet_count, 1) > MAX_ERROR_PERCENTAGE:
-            raise ValueError(f"Too many packet errors in pcap: {error_count} errors out of {total_packet_count} packets (>{MAX_ERROR_PERCENTAGE*100}%) -- skipping this pcap.")
+            return None, None
 
         try:
             ts, buf = packet
@@ -1363,7 +1362,7 @@ def extract_pcap_infos(pcap: dpkt.pcap.Reader, devices: Set[str]) -> Tuple[Dict[
 
             else:
                 # Skip packets that are not from any user announced device
-                logger.info(f"Skipping packet with src_mac: {src_mac} and dst_mac: {dst_mac}, not from any known device {devices}")
+                #logger.info(f"Skipping packet with src_mac: {src_mac} and dst_mac: {dst_mac}, not from any known device {devices}")
                 continue
 
             device_mac = src_mac if is_outgoing else dst_mac
@@ -1957,7 +1956,7 @@ TRAINING_PROGRESS_DATASET_THRESHOLD = 0.95
 MAX_DATASET_SIZE: int = 4400          # stop immediately if reached
 TARGET_ACTIVE_HOURS: int = 16         # "enough activity across hours"
 MAX_DISTINCT_DAYS: int = 4            # stop after 4 distinct active days
-MIN_DATASET_SIZE: int = 1000          # minimum required dataset size to train the model
+MIN_DATASET_SIZE: int = 1500          # minimum required dataset size to train the model
 
 # ===== Bucket helpers =====
 def hour_bucket(ts: int) -> int:
@@ -2731,6 +2730,10 @@ def ml_analysis_loop(pcap_in_pipe: str, out_pipe: str, training_enabled: bool, t
                     pcap_reader = dpkt.pcap.Reader(fifo)
                     device_packets, pcap_statistics = extract_pcap_infos(pcap_reader, devices)
                     logger.debug(f"Pcap parsed in {time.time() - start_wall:.6f}s")
+                
+                if device_packets is None or pcap_statistics is None:
+                    raise ValueError(f"Too many packet errors in pcap, skipping this pcap.")
+
             except ValueError as e:
                 logger.exception(f"Error reading pcap: {e}")
                 raise
@@ -2917,9 +2920,6 @@ def ml_analysis_loop(pcap_in_pipe: str, out_pipe: str, training_enabled: bool, t
             logger.exception("Top-level loop error: %s", e)
             flush_error(out_pipe, traceback.format_exc())
 
-            # brief backoff to avoid tight error loop
-            time.sleep(3.0)
-
 ########################################
 # 7) Main entrypoint
 ########################################
@@ -2964,9 +2964,8 @@ def ml_analyze(ml_logger: object, pcap_in_pipe: str,out_pipe: str,devices_json_p
         ml_analysis_loop(pcap_in_pipe, out_pipe, training_enabled, task_carryovers, executor, devices, progress_json_path)   
 
     except Exception as e:
-        logger.exception(e)
+        logger.exception(f"Machine Learning error: {e}")
         set_state(ERROR)
-        raise e
 
 ########################################
 # 8) Manual test main

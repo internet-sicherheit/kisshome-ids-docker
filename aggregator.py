@@ -201,18 +201,13 @@ def send_results(results, callback_url):
     @param callback_url: URL of the adapter to  recieve the results
     @return: nothing
     """
-    # TODO Send results to the provided url
-    try:
-        #http://172.17.0.1:4711/data -> docker0 bridge on the host
-        logger.debug(f"Sending {results=} to {callback_url=}")
-        logger.info(f"Sending results to {callback_url=}")
+    #http://172.17.0.1:4711/data -> docker0 bridge on the host
+    logger.debug(f"Sending {results=} to {callback_url=}")
+    logger.info(f"Sending results to {callback_url=}")
 
-        resp = requests.post(callback_url, json=results, verify=False)
-        resp.raise_for_status()
-    except Exception as e:
-        logger.exception(e)
-        set_state(ERROR)
-        raise
+    resp = requests.post(callback_url, json=results, verify=False)
+    resp.raise_for_status()
+    
     logger.info(f"Send {results=} to {callback_url=}")
 
 
@@ -402,9 +397,10 @@ def aggregate(aggregator_logger, rb_result_pipe, ml_result_pipe, callback_url, s
                     global MAX_ERRORS
                     MAX_ERRORS = MAX_ERRORS - 1
                     if MAX_ERRORS == 0:
-                        logger.exception(f"Got maximum allowed errors, errors left: {MAX_ERRORS}")
-                        set_state(ERROR)
+                        error = f"Got maximum allowed errors, errors left: {MAX_ERRORS}"
                         MAX_ERRORS = 3
+                        logger.error(error)
+                        raise Exception(error)
 
                 else:
                     # Get current macs from meta.json
@@ -449,10 +445,12 @@ def aggregate(aggregator_logger, rb_result_pipe, ml_result_pipe, callback_url, s
 
                 if ANALYZING in get_state():
                     # Set new state since analysis is done
+                    # Wait a little
+                    time.sleep(1)
                     set_state(RUNNING)
 
             except Exception as e:
-                logger.exception(e)
+                logger.exception(f"Aggregation error: {e}")
                 set_state(ERROR)
             
             logger.info(f"Aggregation for {pcap_name=} done, waiting for next pcap...")
