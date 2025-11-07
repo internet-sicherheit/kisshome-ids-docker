@@ -56,7 +56,7 @@ RUN wget https://github.com/sysstat/sysstat/archive/refs/tags/v${SYSSTAT_VERSION
     make && \
     make install && \
     cd .. && \
-    rm -rf sysstat-${SYSSTAT_VERSION}*
+    rm -rf sysstat-${SYSSTAT_VERSION}* v${SYSSTAT_VERSION}.tar.gz
 
 # Install python dependencies for "normal" packages
 RUN pip3 install --break-system-packages \

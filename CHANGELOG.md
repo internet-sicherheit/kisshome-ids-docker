@@ -42,3 +42,12 @@ First stable version released for study
 
 * Fix blacklisting in suricata to prevent false Malware detections like `ET P2P Vuze BT UDP Connection`
 
+## 1.5.7 (06-11-2025)
+
+### Changes
+
+* Make Suricata daemon start even more graceful by allowing 10 retries
+* Use time.sleep(1) to give the socket more time to process the requests
+* Rework ERROR state: ml and rb remove the ability to set it themselves, instead only the aggregator decides when the state is set
+* Allow 3 written errors either from ml or rb before setting IDS into error state
+

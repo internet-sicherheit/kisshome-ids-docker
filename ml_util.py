@@ -23,7 +23,7 @@
 # SOFTWARE.
 
 """
-Slim fixed Autoencoder for your final configuration only.
+Slim Autoencoder for anomaly detection.
 
 - Architecture: MLP Autoencoder (reconstruct_all)
 - Input dim = 45
@@ -94,7 +94,7 @@ class Autoencoder(Module):
 
     @no_grad()
     def compute_anomaly_score(self, batch: Tensor) -> Tensor:
-        """Return per-sample MSE (B,) and pass-through labels.""" #TODO: check if the last parts of this func are necessary
+        """Return per-sample MSE (B,) and pass-through labels.""" #TODO: check if the last parts of this func are necessary here
         # Do a forward pass on the pcap data
         pred = self(batch)
 
@@ -112,10 +112,13 @@ def save_model(model: Autoencoder, model_path: str) -> None:
     save({"state_dict": model.state_dict()}, model_path)
 
 def load_model(model_path: str, map_location: str = "cpu") -> Autoencoder:
-    ckpt = load(model_path, map_location=map_location)
-    model = Autoencoder()
-    model.load_state_dict(ckpt["state_dict"]) 
-    return model
+    try:
+        ckpt = load(model_path, map_location=map_location)
+        model = Autoencoder()
+        model.load_state_dict(ckpt["state_dict"]) 
+        return model
+    except Exception as e:
+        return None
 
 def infer(model: Autoencoder, features: np.ndarray) -> np.ndarray:
     # Turn into tensor and float

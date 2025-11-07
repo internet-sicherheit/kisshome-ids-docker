@@ -80,6 +80,8 @@ META_JSON = os.path.join("/config", "meta.json")
 SURICATA_YAML_DIRECTORY = "/var/log/suricata"
 # Directory to save the monitor data
 SYSSTAT_DIRECTORY = "/stat"
+# Max error count before throwing an error state
+MAX_ERRORS = 3
     
 
 logger = None
@@ -375,15 +377,33 @@ def aggregate(aggregator_logger, rb_result_pipe, ml_result_pipe, callback_url, s
                 rb_data = dict(literal_eval(rb_pipe.read().strip()))
                 ml_data = dict(literal_eval(ml_pipe.read().strip()))
 
-                # Check if the (ml) pipe data is ok since it interprets the send pcap (Error cases like no valid packets)
-                if "error" in ml_data.keys():
+                # Check if the pipe data is ok
+                if "error" in ml_data.keys() or "error" in rb_data.keys():
+                    ml_message = ""
+                    rb_message = ""
+
+                    if "error" in ml_data.keys():
+                        ml_message = ml_data["error"]
+                    if "error" in rb_data.keys():
+                        rb_message = rb_data["error"]
+
+                    message = {"rb": rb_message, "ml": ml_message}
+
                     head = {"file": pcap_name, 
                             "time": datetime.now(timezone.utc).isoformat(), 
-                            "result": {"status": "error", "message": ml_data["error"]}
+                            "result": {"status": "error", "message": message}
                             }
                     
+                    # Don't send other results regardless if anyone (rb or ml) has results
                     results = {**head}
                     send_results(results, callback_url)
+
+                    # Set error state if 3 analysis results failed
+                    global MAX_ERRORS
+                    MAX_ERRORS = MAX_ERRORS - 1
+                    if MAX_ERRORS == 0:
+                        set_state(ERROR)
+                        MAX_ERRORS = 3
 
                 else:
                     # Get current macs from meta.json

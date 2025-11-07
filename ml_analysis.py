@@ -318,7 +318,7 @@ THRESHOLD_FILENAME = ROOT_SHARED / "anomaly_thresholds.json"
 CURRENT_THRESHOLD_VERSION = "0.9"
 
 DEFAULT_THRESHOLD = 0.0001
-DETECT_LOOKBACK_HISTORY_SIZE = 10 # number of previous windows which are considered for the anomaly detection heuristic
+DETECT_LOOKBACK_HISTORY_SIZE = 15 # number of previous windows which are considered for the anomaly detection heuristic
 
 # Helper functions for threshold computation
 
@@ -970,13 +970,18 @@ def apply_threshold_and_heuristic(scores: np.ndarray, threshold: float):
     If any are not met, not anomalous.
 
     Returns (# anomalous scores, mask of anomalies).
-    If there are fewer than (k+1) points total, returns 0.0.
+    If there are fewer than (k+1) points total, returns (0, mask_of_all_False).    
     """
     s = np.asarray(scores, dtype=float)
     n = s.size
-    k = 15
+    k = DETECT_LOOKBACK_HISTORY_SIZE
 
     w = k + 1  # window size = k lookback + current
+
+    # guard for short sequences
+    if n < w:
+        return 0, np.zeros(n, dtype=bool)
+
     cumsum = np.cumsum(np.insert(s, 0, 0.0))
     win_sum = cumsum[w:] - cumsum[:-w]
     win_mean = win_sum / w
@@ -1145,6 +1150,11 @@ def ensure_thresholds(training_status_json_path: str) -> None:
                 logger.info(f"{header}\n{logger_result}\n{footer}")
             else:
                 logger.warning(f"No logger result for device {mac} in compute_threshold action")
+
+            if threshold is None:
+                logger.error(f"Failed to compute new threshold for device {mac}. Resetting device components.")
+                reset_device_components(mac, training_status_json_path)
+                continue
 
             json_content[mac] = {"version": CURRENT_THRESHOLD_VERSION, "threshold": threshold}
             thresholds_updated = True
@@ -2181,6 +2191,15 @@ def load_and_validate_training_status_json(training_status_json_path: str) -> Di
                 invalid = True
                 continue
 
+            # Verify dataset is valid
+            try:
+                dataset = load_dataset(mac)
+            except:
+                logger.error(f"Training status is in progress for device {mac} but the dataset appears to be corrupted, could not be loaded. Resetting device components.")
+                reset_device_components(mac, training_status_json_path)
+                invalid = True
+                continue    
+
         # Device has not started training yet
         if status.progress == 0.0:
 
@@ -2418,12 +2437,18 @@ class WorkerResult:
     log: str
     task_carryover: TaskCarryover
 
+    reset: bool = False
+
     # inference
     anomalies: Optional[List[Dict[str, Any]]] = None
     # collection
     training_status: Optional[TrainingStatus] = None
     # training
     # ?
+
+class CorruptModelError(Exception):
+    """Raised when a model checkpoint file is missing, truncated, or invalid."""
+    pass
 
 def _worker_initializer():
     # Use this in local testing mode for execution without docker 
@@ -2455,21 +2480,26 @@ def _worker_handle_task(task: WorkerTask) -> WorkerResult:
         if task.action == ACTION_INFER:
             # Feature extraction
             features, pcap_carryover = process_feature_vector(task.packet_rows, carryover.pcap_carryover)
-            wlogger.debug(f"Worker: Extracted {len(features)} features")
+            wlogger.info(f"Worker: Extracted {len(features)} features")
 
             # Load model and threshold
             model = ml_util.load_model(get_model_path(task.device_mac_key))
+            if model is None:
+                raise CorruptModelError(f"Worker: Failed to load model {get_model_path(task.device_mac_key)}.")
+
             threshold = load_thresholds()[task.device_mac_key]
-            wlogger.debug(f"Worker: Loaded model {get_model_path(task.device_mac_key)} with threshold {threshold}")
+            wlogger.info(f"Worker: Loaded model {get_model_path(task.device_mac_key)} with threshold {threshold}")
 
             # Infer scores
             scores = ml_util.infer(model, features)  # np.ndarray
-            wlogger.debug(f"Worker: Did forward pass and got {len(scores)} scores")
+            wlogger.info(f"Worker: Did forward pass and got {len(scores)} scores")
 
             # Load previous scores and prepend (to ensure lookback history for continuous detection)
             previous_scores = carryover.previous_scores
-            wlogger.debug(f"Worker: Loaded {len(previous_scores)} previous scores")
+            wlogger.info(f"Worker: Loaded {len(previous_scores)} previous scores")
             scores = np.concatenate([previous_scores, scores])
+            if len(scores) < DETECT_LOOKBACK_HISTORY_SIZE + 1:
+                wlogger.warning(f"Worker: Not enough scores to apply threshold and heuristic.")
 
             # Apply threshold and heuristic to return anomalies
             anomalies, anomalies_mask = apply_threshold_and_heuristic(scores, threshold)
@@ -2486,12 +2516,12 @@ def _worker_handle_task(task: WorkerTask) -> WorkerResult:
         elif task.action == ACTION_COLLECT:
             # Feature extraction
             features, pcap_carryover = process_feature_vector(task.packet_rows, carryover.pcap_carryover)
-            wlogger.debug(f"Worker: Extracted {len(features)} features")
+            wlogger.info(f"Worker: Extracted {len(features)} features")
 
             # First 
             current_dataset_size = task.device_status.current_size
             new_dataset_size = current_dataset_size + len(features)
-            wlogger.debug(f"Worker: Old dataset size was {current_dataset_size}, new dataset size is {new_dataset_size}")
+            wlogger.info(f"Worker: Old dataset size was {current_dataset_size}, new dataset size is {new_dataset_size}")
 
             # Get updated training status, taking new dataset size into consideration
             new_device_status = reevaluate_training_status(task.device_status, new_dataset_size) 
@@ -2505,24 +2535,26 @@ def _worker_handle_task(task: WorkerTask) -> WorkerResult:
             carryover.pcap_carryover = pcap_carryover
 
         elif task.action == ACTION_TRAIN:
-                wlogger.debug(f"Worker: Dataset collection is complete, training the model and computing threshold.")
+                wlogger.info(f"Worker: Dataset collection is complete, training the model and computing threshold.")
                 # Dataset collection is complete, train the model and compute threshold
 
                 full_dataset = load_dataset(task.device_mac_key)
-                wlogger.debug(f"Worker: Loaded dataset of length {len(full_dataset)}")
+                wlogger.info(f"Worker: Loaded dataset of length {len(full_dataset)}")
 
                 # Load model and train
                 model_path = get_model_path(task.device_mac_key)
                 model = ml_util.load_model(model_path)
-                wlogger.debug(f"Worker: Loaded model {model_path}")
+                if model is None:
+                    raise CorruptModelError(f"Worker: Failed to load model {model_path}.")
+                wlogger.info(f"Worker: Loaded model {model_path}")
                 ml_util.finetune(model, full_dataset)
                 wlogger.info(f"Worker: Trained model successfully")
 
                 # For the trained model we still need to compute a threshold
                 scores = ml_util.infer(model, full_dataset)
-                wlogger.debug(f"Worker: Did forward pass and got {len(scores)} scores")
+                wlogger.info(f"Worker: Did forward pass and got {len(scores)} scores")
                 threshold = compute_threshold(scores, logger=wlogger) 
-                wlogger.debug(f"Worker: Computed threshold and got {threshold}")
+                wlogger.info(f"Worker: Computed threshold and got {threshold}")
 
                 # New training status is complete, with dataset size 0
                 new_device_status = reevaluate_training_status(task.device_status, 0, training_complete=True)
@@ -2552,6 +2584,14 @@ def _worker_handle_task(task: WorkerTask) -> WorkerResult:
         result["log"] = buffer.getvalue()
         return WorkerResult(**result)
 
+    except CorruptModelError as e:
+        wlogger.error(f"Worker task failed: {type(e).__name__}: {e}")
+        return WorkerResult(
+            ok=False,
+            log=buffer.getvalue(),  # include everything logged so far + traceback 
+            task_carryover=carryover,
+            reset=True,
+            )
     except Exception as e:
         wlogger.exception(f"Worker task failed: {type(e).__name__}: {e}")
         return WorkerResult(
@@ -2566,8 +2606,6 @@ def _worker_handle_task(task: WorkerTask) -> WorkerResult:
 
 JANNIKLAS_THRESHOLD = 50
 JANNIKLAS_THRESHOLD2= 99
-
-SAVING_GRACE = 5
 
 def create_device_report(device_mac_key: str, action: Literal[ACTION_INFER, ACTION_COLLECT, ACTION_TRAIN], device_status: TrainingStatus = None, anomalies_found_for_device: int = None, error: str = None) -> Dict[str, Any]:
     report = {}
@@ -2676,10 +2714,6 @@ def ml_analysis_loop(pcap_in_pipe: str, out_pipe: str, training_enabled: bool, t
     """
     """
     logger.info(f"Starting ml_analysis_loop")
-
-    # We track the number of non-successful runs so a restart can be triggered after a certain number of errors.
-    # Successful runs decrease the error count.
-    faulty_pcap_count = 0
 
     # Run forever: wait on pcap pipe
     while True:
@@ -2791,6 +2825,10 @@ def ml_analysis_loop(pcap_in_pipe: str, out_pipe: str, training_enabled: bool, t
                     device_results[mac_key] = device_report
                     # Worker log is info if the worker is not successful
                     logger.info("%s\n%s\n%s", header, log_text, footer)
+
+                    if res.reset:
+                        logger.error(f"Wroker detected corrupt files for device {mac_key}. Resetting device components.")
+                        reset_device_components(mac_key, progress_json_path)
                     continue
                 else:
                     # Worker log is debug only if the worker is successful
@@ -2874,17 +2912,11 @@ def ml_analysis_loop(pcap_in_pipe: str, out_pipe: str, training_enabled: bool, t
             # Compose final payload
             jan_niklas_reports = {mac_key: translate_result_to_janniklas(report) for mac_key, report in device_results.items()}
             flush_results(out_pipe, jan_niklas_reports, pcap_statistics, analysis_ms)
-
-            faulty_pcap_count = max(faulty_pcap_count - 1, 0)
             
         except Exception as e:
             logger.exception("Top-level loop error: %s", e)
             flush_error(out_pipe, traceback.format_exc())
 
-            # If too many consecutive pcaps cannot be processed, set the state to ERROR to initiate a restart.
-            if faulty_pcap_count >= SAVING_GRACE:
-                set_state(ERROR)
-                raise Exception(f"Too many consecutive pcaps could not be processed, raising to intiaite restart. Please review the logs.")
             # brief backoff to avoid tight error loop
             time.sleep(3.0)
 
