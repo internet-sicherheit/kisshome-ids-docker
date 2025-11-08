@@ -135,8 +135,6 @@ def rb_start_daemon(rb_logger):
                             if "Engine started" in log_line:
                                 is_ready = True # Daemon has created socket and started engine
                                 break
-                # Sleep a little
-                time.sleep(1)
                 logger.info(f"Suricata daemon started: {suricatad_process}")
         else:
             logger.warning("Suricata rule preparation failed")
@@ -175,6 +173,8 @@ def rb_test_daemon(rb_logger):
     """
     # Test daemon
     global MAX_RETRIES
+    # Sleep a little
+    time.sleep(1)
     cmd = f"suricatasc {RB_SOCKET} -c version"
     logger.debug(f"Invoking Suricatasc with {cmd=}")
     suricatasc_process = subprocess.run(cmd, capture_output=True, shell=True)
@@ -186,8 +186,6 @@ def rb_test_daemon(rb_logger):
             logger.info(f"Try to restart Suricata daemon, retries left: {MAX_RETRIES}")
             # Restart daemon
             rb_start_daemon(rb_logger)
-            # Test again after some sleep
-            time.sleep(1)
             rb_test_daemon(rb_logger)
         else:
             # Reset retries
@@ -239,8 +237,6 @@ def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
                 start_time = time.time()
                 # Test if the socket of the daemon is working
                 rb_test_daemon(rb_logger)
-                # Sleep a little
-                time.sleep(1)
                 # Write the data to a tempfile since suricatasc cannot process streams
                 temp_pcap = None
                 with tempfile.NamedTemporaryFile(delete=False) as pcap_file:
@@ -249,6 +245,8 @@ def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
                     logger.debug(f"Created temp file {temp_pcap}")
                 logger.info("Analyzing pcap with Suricatasc")
                 # Use the default log directory to save the results (eve.json)
+                # Sleep a little
+                time.sleep(1)
                 cmd = f"suricatasc {RB_SOCKET} -c 'pcap-file {temp_pcap} {SURICATA_YAML_DIRECTORY}'"
                 logger.debug(f"Invoking Suricatasc with {cmd=}")
                 suricatasc_process = subprocess.run(cmd, capture_output=True, shell=True)
@@ -263,6 +261,8 @@ def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
                 else:
                     has_finished = False
                     while not has_finished:
+                        # Sleep a little
+                        time.sleep(1)
                         cmd = f"suricatasc {RB_SOCKET} -c pcap-current"
                         logger.debug(f"Waiting for Suricatasc with {cmd=}")
                         waiting_process = subprocess.run(cmd, capture_output=True, shell=True)
@@ -452,6 +452,8 @@ def rb_update_rules():
         # Then prepare newly fetched rules for the daemon if preparation was successful
         if rb_prepare_rules():
             # Lastly, reload rules for the daemon process
+            # Sleep a little
+            time.sleep(1)
             cmd = f"suricatasc {RB_SOCKET} -c reload-rules"
             logger.debug(f"Invoking Suricatasc rule reload with {cmd=}")
             suricatasc_process = subprocess.run(cmd, capture_output=True, shell=True)

@@ -74,7 +74,7 @@ logger.propagate = False
 setproctitle.setproctitle(__file__)
 
 # Version
-VERSION = "1.5.8"
+VERSION = "1.5.9"
 
 # For pcap check
 PCAP_MAGIC_NUMBERS = {
@@ -344,10 +344,10 @@ class Pcap(Resource):
 
                 # Start aggregation before analysis to enable reading pipes first
                 ids.start_aggregation()
-                time.sleep(1)
+                time.sleep(3)
 
                 ids.start_analysis()
-                time.sleep(1)
+                time.sleep(3)
 
                 # Lock in case of successive pcaps being sent too fast synchronously
                 with pipe_lock:

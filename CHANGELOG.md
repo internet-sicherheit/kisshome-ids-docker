@@ -58,3 +58,10 @@ First stable version released for study
 * Fixed a bug with dpkt closing the pipe leading to an error in the API (reader close on fifo pipe)
 * Switch state gracefully in aggregator
 * Remove long sleep of 3 seconds in ml
+
+## 1.5.9 (08-11-2025)
+
+### Changes
+
+* Increased sleep in API from 1 to 3 seconds in /pcap
+* Add more sleeps to suricata in order to prevent overloading of the command socket
