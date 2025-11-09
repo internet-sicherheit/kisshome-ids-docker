@@ -2722,30 +2722,41 @@ def ml_analysis_loop(pcap_in_pipe: str, out_pipe: str, training_enabled: bool, t
         run_failed = False
 
         try:
-            try:
-                # Blocking read from pipe to await a new pcap
-                with open(pcap_in_pipe, "rb") as fifo:
+            device_packets = None
+            pcap_statistics = None
+
+            # Blocking read from pipe to await a new pcap
+            with open(pcap_in_pipe, "rb") as fifo:
+                try:
                     logger.info(f"New pcap from {pcap_in_pipe} received")
                     start_wall = time.time()
-                    pcap_reader = dpkt.pcap.Reader(fifo)
+                    pcap_reader = dpkt.pcap.Reader(fifo) # Takes file handle and reads in buffers
                     device_packets, pcap_statistics = extract_pcap_infos(pcap_reader, devices)
                     logger.debug(f"Pcap parsed in {time.time() - start_wall:.6f}s")
                 
-                if device_packets is None or pcap_statistics is None:
-                    raise ValueError(f"Too many packet errors in pcap, skipping this pcap.")
+                    if device_packets is None or pcap_statistics is None:
+                        raise ValueError(f"Too many packet errors in pcap, skipping this pcap.")
 
-            except ValueError as e:
-                logger.exception(f"Error reading pcap: {e}")
-                raise
-            except dpkt.NeedData as e:
-                logger.exception(f"NeedData: empty or truncated pcap {e}")
-                raise
-            except dpkt.UnpackError as e:
-                logger.exception(f"Pcap parse error - invalid or corrupted pcap {e}")
-                raise
-            except Exception as e:
-                logger.exception(f"Unknown error parsing pcap: {e}")
-                raise
+                except ValueError as e:
+                    # Flush buffer
+                    fifo.read()
+                    logger.exception(f"Error reading pcap: {e}")
+                    raise
+                except dpkt.NeedData as e:
+                    # Flush buffer
+                    fifo.read()
+                    logger.exception(f"NeedData: empty or truncated pcap {e}")
+                    raise
+                except dpkt.UnpackError as e:
+                    # Flush buffer
+                    fifo.read()
+                    logger.exception(f"Pcap parse error - invalid or corrupted pcap {e}")
+                    raise
+                except Exception as e:
+                    # Flush buffer
+                    fifo.read()
+                    logger.exception(f"Unknown error parsing pcap: {e}")
+                    raise
 
             current_progress = load_and_validate_training_status_json(progress_json_path)
 

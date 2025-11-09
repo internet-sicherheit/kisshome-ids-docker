@@ -445,8 +445,6 @@ def aggregate(aggregator_logger, rb_result_pipe, ml_result_pipe, callback_url, s
 
                 if ANALYZING in get_state():
                     # Set new state since analysis is done
-                    # Wait a little
-                    time.sleep(1)
                     set_state(RUNNING)
 
             except Exception as e:
