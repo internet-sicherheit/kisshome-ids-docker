@@ -124,9 +124,9 @@ def rb_start_daemon(rb_logger):
             else:
                 is_ready = False
                 while not is_ready:
-                    # Use the file provided in the .yaml
-                    with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "r") as log_file:
-                        for log_line in log_file.readlines():
+                    # Use the file path provided in the .yaml
+                    with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "r") as log_file_r:
+                        for log_line in log_file_r.readlines():
                             if "unix socket" in log_line:
                                 socket = str(log_line).split("'")[1] # Parse socket name from line
                                 if RB_SOCKET != socket:
@@ -134,7 +134,11 @@ def rb_start_daemon(rb_logger):
                                 logger.debug(f"Socket created at: {RB_SOCKET}")
                             if "Engine started" in log_line:
                                 is_ready = True # Daemon has created socket and started engine
+                                log_file_r.seek(0)
                                 break
+                        log_file_r.seek(0) # Reset read
+                with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "w") as log_file_w:
+                        log_file_w.write("") # Delete old logs
                 logger.info(f"Suricata daemon started: {suricatad_process}")
         else:
             logger.warning("Suricata rule preparation failed")
@@ -259,28 +263,18 @@ def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
                         logger.debug(f"Deleted temp file {temp_pcap}")
                     raise Exception(suricatasc_process) 
                 else:
+                    # Wait for Suricata to finish but don't use socket
                     has_finished = False
                     while not has_finished:
-                        # Sleep a little
-                        time.sleep(1)
-                        cmd = f"suricatasc {RB_SOCKET} -c pcap-current"
-                        logger.debug(f"Waiting for Suricatasc with {cmd=}")
-                        waiting_process = subprocess.run(cmd, capture_output=True, shell=True)
-                        if waiting_process.returncode != 0:
-                            # Something went wrong
-                            logger.exception(f"Suricatasc waiting process had a non zero exit code: {waiting_process}")
-                            # Unlink tempfile (delete)
-                            if temp_pcap:
-                                os.unlink(temp_pcap)
-                                logger.debug(f"Deleted temp file {temp_pcap}")
-                            raise Exception(waiting_process) 
-                        else:
-                            if not temp_pcap in str(waiting_process.stdout): # if the file doesn't appear, it is processed
-                                has_finished = True # Done processing the pcap file
-                                break
-                            else:
-                                logger.debug(f"Output of waiting process: {waiting_process.stdout}")
-                                continue
+                        # Use the logfile to check if pcap is done
+                        with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "r") as log_file:
+                            for log_line in log_file.readlines():
+                                if "counters: Alerts:" in log_line: # Pcap is done
+                                    has_finished = True
+                                    log_file.seek(0)
+                                    break
+                            # Reset file read
+                            log_file.seek(0)
                     # Unlink tempfile (delete)
                     if temp_pcap:
                         os.unlink(temp_pcap)

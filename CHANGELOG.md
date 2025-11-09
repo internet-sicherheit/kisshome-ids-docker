@@ -65,3 +65,10 @@ First stable version released for study
 
 * Increased sleep in API from 1 to 3 seconds in /pcap
 * Add more sleeps to suricata in order to prevent overloading of the command socket
+
+## 1.6.0 (09-11-2025)
+
+### Changes
+
+* Remove pcap-current command since it seems to cause trouble
+* Now check log file to determine if suricata has finished
