@@ -72,3 +72,11 @@ First stable version released for study
 
 * Remove pcap-current command since it seems to cause trouble
 * Now check log file to determine if suricata has finished
+
+## 1.6.1 (11-11-2025)
+
+### Changes
+
+* Change literal_eval to json.loads in aggegator
+* Revert retry attempts from 10 to 3 in rb_analysis 
+

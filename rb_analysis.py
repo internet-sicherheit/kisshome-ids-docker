@@ -83,7 +83,7 @@ RB_SOCKET = "/var/run/suricata/suricata-command.socket"
 # Path to meta.json
 META_JSON = None
 # Attempts before throwing an error
-MAX_RETRIES = 10
+MAX_RETRIES = 3
 
 
 logger = None 
@@ -193,13 +193,12 @@ def rb_test_daemon(rb_logger):
             rb_test_daemon(rb_logger)
         else:
             # Reset retries
-            MAX_RETRIES = 10
+            MAX_RETRIES = 3
             logger.exception(f"Suricatasc process had a non zero exit code: {suricatasc_process}")
             raise Exception(suricatasc_process)
     logger.info(f"Suricata daemon test successful: {suricatasc_process}")
     # Reset retries
-    MAX_RETRIES = 10
-
+    MAX_RETRIES = 3
 
 def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
     """
@@ -318,7 +317,7 @@ def rb_flush_results(rb_result_pipe_path, results):
     @return: nothing
     """
     with open(rb_result_pipe_path, "w") as result_pipe:
-        result_pipe.write(json.dumps(results))
+        result_pipe.write(json.dumps(results, indent=4))
 
 
 def rb_filter_results(eve_json, duration):

@@ -74,7 +74,7 @@ logger.propagate = False
 setproctitle.setproctitle(__file__)
 
 # Version
-VERSION = "1.6.0"
+VERSION = "1.6.1"
 
 # For pcap check
 PCAP_MAGIC_NUMBERS = {

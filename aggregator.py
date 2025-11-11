@@ -39,7 +39,6 @@ from logging.handlers import TimedRotatingFileHandler
 from states import get_state, set_state, ANALYZING, RUNNING, ERROR
 from monitor import get_cpuinfo, get_gpuinfo, start_monitoring, stop_monitoring, SYSSTAT_DIRECTORY
 from datetime import datetime, timezone
-from ast import literal_eval
 
 LOG_DIR = "/shared/logs"
 LOG_NAME = "aggregator.log"
@@ -363,14 +362,14 @@ def aggregate(aggregator_logger, rb_result_pipe, ml_result_pipe, callback_url, s
             #
             #
             #
-            # Merge to a final result as json
+            # Merge to a final result as jsons
             try:
                 # In case the timeout is not reached, stop the monitoring
                 stop_monitoring()
 
                 # Parse pipes to dict
-                rb_data = dict(literal_eval(rb_pipe.read().strip()))
-                ml_data = dict(literal_eval(ml_pipe.read().strip()))
+                rb_data = json.loads(rb_pipe.read().strip())
+                ml_data = json.loads(ml_pipe.read().strip())
 
                 # Check if the pipe data is ok
                 if "error" in ml_data.keys() or "error" in rb_data.keys():
