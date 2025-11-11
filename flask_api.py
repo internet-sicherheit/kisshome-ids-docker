@@ -74,7 +74,7 @@ logger.propagate = False
 setproctitle.setproctitle(__file__)
 
 # Version
-VERSION = "1.6.1"
+VERSION = "1.6.2"
 
 # For pcap check
 PCAP_MAGIC_NUMBERS = {
@@ -215,8 +215,7 @@ class Status(Resource):
 
 @ns.route("/configure")
 @api.doc(responses={200: f"Configuration set",
-                    415: f"Invalid content type", 
-                    429: f"{ENV_NAME} busy",
+                    415: f"Invalid content type",
                     500: f"Internal Server Error",
                     503: f"{ENV_NAME} unavailable"}, 
          params={"meta_json": {"description": "The list with device MACs for filtering", "type": "file"},
@@ -229,9 +228,6 @@ class Configuration(Resource):
         if ERROR in get_state():
             # IDS has exited, return 503 service unavailable
             return {"result": "Failed", "message": f"{ENV_NAME} has exited, state: {get_state()}"}, 503
-        if CONFIGURING in get_state():
-            # IDS is configuring, return 429 too many request
-            return {"result": "Failed", "message": f"{ENV_NAME} busy, state: {get_state()}"}, 429
         if STARTED in get_state() or RUNNING in get_state() or ANALYZING in get_state():
             try:
                 args = config_parser.parse_args()
@@ -241,13 +237,6 @@ class Configuration(Resource):
                 callback_url = args.get('callback_url')
                 save_threshold_seconds = args.get('save_threshold_seconds')
                 allow_training = args.get('allow_training')
-
-                old_state = get_state()
-
-                # Don't override errors
-                if not ERROR in get_state():
-                    # Set state to prevent sending files via /pcap until it is done
-                    set_state(CONFIGURING)
 
                 # Update config
                 ids.update_configuration(callback_url=callback_url, save_threshold_seconds=save_threshold_seconds, allow_training=allow_training)
@@ -269,15 +258,10 @@ class Configuration(Resource):
                         meta_file.write("")
                     json.dump(meta_data, meta_file)
                 
-                # Keep an eye on race conditions: Can be RUNNING by aggregator, handle
-                if ANALYZING in old_state and CONFIGURING in get_state(): # Cannot be error
-                    # Set state back to analyzing
-                    set_state(ANALYZING)
-                else:
-                    # Don't override errors
-                    if not ERROR in get_state():
-                        # Set state to running now
-                        set_state(RUNNING)
+                # Change if state is started
+                if STARTED in get_state():
+                    # Set state to running now
+                    set_state(RUNNING)
 
                 logger.debug(f"New configuration: {callback_url=}, {save_threshold_seconds=}, {allow_training=}, {meta_json=}")
                 logger.info("New configuration applied successfully")
@@ -309,7 +293,7 @@ class Pcap(Resource):
         if STARTED in get_state():
             # IDS is not configured yet, return 409 conflict
             return {"result": "Failed", "message": f"{ENV_NAME} not configured, state: {get_state()}"}, 409
-        if ANALYZING in get_state() or CONFIGURING in get_state():
+        if ANALYZING in get_state():
             # IDS is analysing or configuring, return 429 too many request
             return {"result": "Failed", "message": f"{ENV_NAME} busy, state: {get_state()}"}, 429
         else:

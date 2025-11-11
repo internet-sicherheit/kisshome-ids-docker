@@ -40,7 +40,6 @@ LOCK = FileLock(f"{STATE_FILE}.lock")
 # Define the states of our environment
 STARTED = "Started"
 RUNNING = "Running"
-CONFIGURING = "Configuring"
 ANALYZING = "Analyzing"
 ERROR = "Error"
 

@@ -80,3 +80,9 @@ First stable version released for study
 * Change literal_eval to json.loads in aggegator
 * Revert retry attempts from 10 to 3 in rb_analysis 
 
+## 1.6.2 (11-11-2025)
+
+### Changes
+
+* Remove state "Configuring" because of potential race condition
+
