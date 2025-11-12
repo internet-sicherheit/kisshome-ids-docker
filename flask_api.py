@@ -238,7 +238,7 @@ class Configuration(Resource):
                 save_threshold_seconds = args.get('save_threshold_seconds')
                 allow_training = args.get('allow_training')
 
-                # Update config
+                # Update config and stop current processes
                 ids.update_configuration(callback_url=callback_url, save_threshold_seconds=save_threshold_seconds, allow_training=allow_training)
                 
                 meta_data = None
@@ -259,7 +259,7 @@ class Configuration(Resource):
                     json.dump(meta_data, meta_file)
                 
                 # Change if state is started
-                if STARTED in get_state():
+                if STARTED in get_state() or ANALYZING in get_state():
                     # Set state to running now
                     set_state(RUNNING)
 
