@@ -227,11 +227,11 @@ def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
     if not META_JSON:
         META_JSON = meta_json
 
-    # Use suricata on the provided pcap content
-    try:
-        # Set the rule update process first so that rules are updated daily using schedule modul
-        schedule.every(1).day.do(rb_update_rules)
-        while True:
+    # Set the rule update process first so that rules are updated daily using schedule modul
+    schedule.every(1).day.do(rb_update_rules)
+    while True:
+        # Use suricata on the provided pcap content
+        try:
             # Check if the scheduled job needs to be executed
             schedule.run_pending()
             # Blocks until the writer has finished its job
@@ -284,11 +284,12 @@ def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
                     rb_write_results(rb_result_pipe_path, duration_s)
 
             logger.info(f"Suricata analysis done, waiting for next pcap...")
-    except Exception as e:
-        # Exit gracefully by notifying the aggregator
-        logger.exception(f"Suricata error: {e}")
-        message = {"error": traceback.format_exc()}
-        rb_flush_results(rb_result_pipe_path, message)
+
+        except Exception as e:
+            # Exit gracefully by notifying the aggregator
+            logger.exception(f"Suricata error: {e}")
+            message = {"error": traceback.format_exc()}
+            rb_flush_results(rb_result_pipe_path, message)
 
 
 def rb_write_results(rb_result_pipe_path, duration):
