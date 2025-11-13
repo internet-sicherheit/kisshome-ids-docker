@@ -8,7 +8,7 @@ $ sudo sh get-docker.sh
 ```
 ## Run using the KISSHome Watchdog Skript
 
-The easiest way to install and run is the 'install-kisshome-ids-watchdog.sh' Skript in the 'KISSHome-IDS-Watchdog' Folder
+The easiest way to install and run is the 'install-kisshome-ids-watchdog.sh' Skript in the [KISSHome-IDS-Watchdog](https://github.com/internet-sicherheit/kisshome-ids-docker/tree/main/KISSHome-IDS-Watchdog) Folder
 
 ## Pull
 
