@@ -6,23 +6,9 @@ Make sure docker is running on the target system. Use `docker-ce` and not `docke
 $ curl -fsSL https://get.docker.com -o get-docker.sh
 $ sudo sh get-docker.sh
 ```
+## Run using the KISSHome Watchdog Skript
 
-## Build
-
-To build the present docker image for `arm` and `x64`, first create a builder with `buildx`. Use
-
-```bash
-$ sudo docker buildx create --use --name multiarch_builder
-```
-
-To publish the build, run
-
-```bash
-$ sudo docker buildx build -f Dockerfile-base --platform linux/amd64,linux/arm64 -t kisshome/ids:base --push .
-$ sudo docker buildx build -f Dockerfile-stable --platform linux/amd64,linux/arm64 -t kisshome/ids:stable --push .
-```
-
-To debug the output of docker it is recommended to use the `--progress=plain` flag.
+The easiest way to install and run is the install-kisshome-ids-watchdog.sh Skript in the KISSHome-IDS-Watchdog Folder
 
 ## Pull
 
@@ -78,6 +64,23 @@ $ cat /path/to/file.pcap | curl -X POST -H "Content-Type: application/octet-stre
 ```
 
 To read the full API doc, visit http://localhost:5000/
+
+## Build
+
+To build the present docker image for `arm` and `x64`, first create a builder with `buildx`. Use
+
+```bash
+$ sudo docker buildx create --use --name multiarch_builder
+```
+
+To publish the build, run **replace the repository name with your own repository** and use
+
+```bash
+$ sudo docker buildx build -f Dockerfile-base --platform linux/amd64,linux/arm64 -t your/reponame:base --push .
+$ sudo docker buildx build -f Dockerfile-stable --platform linux/amd64,linux/arm64 -t your/reponame:stable --push .
+```
+
+To debug the output of docker it is recommended to use the `--progress=plain` flag.
 
 ## License
 
