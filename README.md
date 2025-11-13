@@ -10,6 +10,8 @@ $ sudo sh get-docker.sh
 
 The easiest way to install and run is the 'install-kisshome-ids-watchdog.sh' Skript in the [KISSHome-IDS-Watchdog](https://github.com/internet-sicherheit/kisshome-ids-docker/tree/main/KISSHome-IDS-Watchdog) Folder
 
+For a manual installation follow the steps below.
+
 ## Pull
 
 To pull an image, use
