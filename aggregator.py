@@ -79,8 +79,9 @@ META_JSON = os.path.join("/config", "meta.json")
 SURICATA_YAML_DIRECTORY = "/var/log/suricata"
 # Directory to save the monitor data
 SYSSTAT_DIRECTORY = "/stat"
-# Max error count before throwing an error state
+# Max consecutive error count before throwing an error state
 MAX_ERRORS = 3
+current_error_count = 0
     
 
 logger = None
@@ -371,6 +372,8 @@ def aggregate(aggregator_logger, rb_result_pipe, ml_result_pipe, callback_url, s
                 rb_data = json.loads(rb_pipe.read().strip())
                 ml_data = json.loads(ml_pipe.read().strip())
 
+                global current_error_count
+
                 # Check if the pipe data is ok
                 if "error" in ml_data.keys() or "error" in rb_data.keys():
                     ml_message = ""
@@ -392,12 +395,11 @@ def aggregate(aggregator_logger, rb_result_pipe, ml_result_pipe, callback_url, s
                     results = {**head}
                     send_results(results, callback_url)
 
-                    # Set error state if 3 analysis results failed
-                    global MAX_ERRORS
-                    MAX_ERRORS = MAX_ERRORS - 1
-                    if MAX_ERRORS == 0:
-                        error = f"Got maximum allowed errors, errors left: {MAX_ERRORS}"
-                        MAX_ERRORS = 3
+                    # Set error state if too many analysis results failed consecutively
+                    current_error_count = current_error_count + 1
+                    if current_error_count == MAX_ERRORS:
+                        error = f"Got maximum allowed errors."
+                        current_error_count = 0 # Is this reset necessary?
                         logger.error(error)
                         raise Exception(error)
 
@@ -441,6 +443,9 @@ def aggregate(aggregator_logger, rb_result_pipe, ml_result_pipe, callback_url, s
                     
                     results = {**head, **pipe_data, **config, **suricata_telemetry, **hardware, **monitor_data}
                     send_results(results, callback_url)
+
+                    # Everything went well, reset error count
+                    current_error_count = 0
 
                 if ANALYZING in get_state():
                     # Set new state since analysis is done

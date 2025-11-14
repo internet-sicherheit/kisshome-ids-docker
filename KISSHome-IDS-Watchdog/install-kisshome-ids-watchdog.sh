@@ -94,7 +94,7 @@ PORT="${PORT:-5000}"
 
 # --- Internal tuning ---
 CURL_TIMEOUT=5
-RETRY_COUNT=3
+RETRY_COUNT=2
 MIN_RESTART_INTERVAL_SECS=60
 STATE_DIR="/var/tmp"
 LAST_RESTART_FILE="$STATE_DIR/kisshome_ids_last_restart"
@@ -181,7 +181,7 @@ get_api_status() {
       return 0
     fi
     attempt=$((attempt+1))
-    sleep 7
+    sleep 2
   done
   return 1
 }

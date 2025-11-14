@@ -86,3 +86,9 @@ First stable version released for study
 
 * Remove state "Configuring" because of potential race condition
 
+## 1.6.3 (13-11-2025)
+
+### Changes
+
+* Reset error count on succesful result send
+

@@ -395,9 +395,10 @@ def rb_prepare_rules():
     # Not case sensitive pattern to filter important rules
     # Exclude 'microsoft' from blacklist since it can be mentioned as a source or menioned in a user agent'
     # 'sslbl' by abuse.ch deprecated, remove from whitelist
-    cmd = (f"grep -viE 'et info|affected_product windows|alert pkthdr|alert icmp|confidence low|signature_severity informational' " # Blacklist with -v
+    cmd = (f"grep -viE 'et info|affected_product windows|alert pkthdr|alert icmp|confidence low|confidence medium|signature_severity informational' " # Blacklist with -v
             f"/var/lib/suricata/rules/suricata.rules | "
-            f"grep -iE 'kisshome|urlhaus|et malware|confidence high|signature_severity major' " # Whitelist
+            f"grep -iE 'kisshome|urlhaus|et malware' | " # First important whitelist
+            f"grep -iE 'confidence high|signature_severity major' " # Second whitelist
             f"> /var/lib/suricata/rules/filtered.rules && "
             f"mv /var/lib/suricata/rules/filtered.rules /var/lib/suricata/rules/suricata.rules")
     logger.debug(f"Preparing rules with {cmd=}")
