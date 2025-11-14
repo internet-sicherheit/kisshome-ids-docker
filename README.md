@@ -7,22 +7,9 @@ $ curl -fsSL https://get.docker.com -o get-docker.sh
 $ sudo sh get-docker.sh
 ```
 
-## Build
+## Run using the KISSHome Watchdog Skript
 
-To build the present docker image for `arm` and `x64`, first create a builder with `buildx`. Use
-
-```bash
-$ sudo docker buildx create --use --name multiarch_builder
-```
-
-To publish the build, run
-
-```bash
-$ sudo docker buildx build -f Dockerfile-base --platform linux/amd64,linux/arm64 -t kisshome/ids:base --push .
-$ sudo docker buildx build -f Dockerfile-stable --platform linux/amd64,linux/arm64 -t kisshome/ids:stable --push .
-```
-
-To debug the output of docker it is recommended to use the `--progress=plain` flag.
+The easiest way to install and run is the 'install-kisshome-ids-watchdog.sh' Skript in the [KISSHome-IDS-Watchdog](https://github.com/internet-sicherheit/kisshome-ids-docker/tree/main/KISSHome-IDS-Watchdog) Folder
 
 ## Pull
 
@@ -48,7 +35,7 @@ $ sudo mkdir -p /var/log/shared
 $ sudo docker run --rm -d -p 5000:5000 --security-opt apparmor=unconfined -v /var/log/shared:/shared:Z kisshome/ids:stable
 ```
 
-`--security-opt apparmor=unconfined` as well as `:z` prevent Ubuntu/Debian or SELinux Systems from blocking access to the shared volume.
+`--security-opt apparmor=unconfined` as well as `:Z` prevent Ubuntu/Debian or SELinux Systems from blocking access to the shared volume.
 The volume and the port are customizable.
 
 ## API

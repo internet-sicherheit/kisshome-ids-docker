@@ -92,3 +92,10 @@ First stable version released for study
 
 * Reset error count on succesful result send
 
+## 1.6.4 (14-11-2025)
+
+### Changes
+
+* Improve suricata whitelist filter 
+
+
