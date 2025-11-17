@@ -98,4 +98,9 @@ First stable version released for study
 
 * Improve suricata whitelist filter 
 
+## 1.6.5 (17-11-2025)
+
+### Changes
+
+* Bugfix in API to prevent a race condition on the meta.json file by /config and /status endpoints
 

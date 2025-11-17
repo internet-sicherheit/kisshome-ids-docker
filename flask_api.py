@@ -41,6 +41,7 @@ from flask import Flask, request
 from flask_restx import Api, Resource, fields, reqparse, inputs
 from werkzeug.datastructures import FileStorage
 from threading import Lock
+from filelock import FileLock
 from kisshome_ids import KisshomeIDS
 from states import *
 from monitor import start_monitoring
@@ -74,7 +75,7 @@ logger.propagate = False
 setproctitle.setproctitle(__file__)
 
 # Version
-VERSION = "1.6.4"
+VERSION = "1.6.5"
 
 # For pcap check
 PCAP_MAGIC_NUMBERS = {
@@ -91,6 +92,7 @@ PCAPNG_MAGIC_NUMBER = b'\x0a\x0d\x0d\x0a'  # Bi-endian, pcapng (standard)
 
 # Initialize Locks
 pipe_lock = Lock()
+meta_lock = FileLock(f"/config/meta.json.lock")
 
 # Remember if logs were send
 logs_send = False
@@ -183,14 +185,21 @@ class Status(Resource):
             # Load meta.json if it exists 
             meta_json = {}
             if os.path.exists(ids.meta_json):
-                with open(ids.meta_json, "r") as meta_file:
-                    meta_json = json.load(meta_file)
+                with meta_lock:
+                    with open(ids.meta_json, "r") as meta_file:
+                        try:
+                            meta_json = json.load(meta_file)
+                        except json.JSONDecodeError:
+                            pass
             # Load training_progress.json if it exists
             tmp_training_json = {}
             training_json = {}
             if os.path.exists(ids.training_json):
                 with open(ids.training_json, "r") as training_file:
-                    tmp_training_json = json.load(training_file)
+                    try:
+                        tmp_training_json = json.load(training_file)
+                    except json.JSONDecodeError:
+                        pass
             # Filter progress and description
             for mac, info in tmp_training_json.items():
                 formatted_mac = mac.replace('-', ':').upper()
@@ -252,11 +261,12 @@ class Configuration(Resource):
                     return {"result": "Failed", "message": "Invalid content type"}, 415
 
                 # Write meta_json directly to disk
-                with open(ids.meta_json, "w") as meta_file:
-                    if os.path.exists(ids.meta_json):
-                        # Flush content if it exist
-                        meta_file.write("")
-                    json.dump(meta_data, meta_file)
+                with meta_lock:
+                    with open(ids.meta_json, "w") as meta_file:
+                        if os.path.exists(ids.meta_json):
+                            # Flush content if it exist
+                            meta_file.write("")
+                        json.dump(meta_data, meta_file)
                 
                 # Change if state is started
                 if STARTED in get_state() or ANALYZING in get_state():
