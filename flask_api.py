@@ -112,27 +112,27 @@ def configure_app(flask_app):
     logger.info(f"Start Flask API with version {VERSION}")
 
 
-def yield_pids():
+def yield_active_processes():
     """
     """
     # Get all processes whose name matches the script set via setproctitle
     target_processes = []
-    python_process_extension = ".py"
 
     for proc in psutil.process_iter(['pid', 'name']):
         try:
-            if python_process_extension in proc.info['name']:
+            if "/app/" in proc.info['name']:
                 target_processes.append(proc)
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
     
     # Print
-    logger.info("Active python processes:\n")
-    for proc in target_processes:
-        pid = proc.pid
-        name = proc.name()
-        is_alive = proc.is_running()
-        logger.info(f"Process with {name=} has {pid=}, {is_alive=}")
+    if target_processes:
+        logger.info("Active python processes:")
+        for proc in target_processes:
+            pid = proc.pid
+            name = proc.name()
+            is_alive = proc.is_running()
+            logger.info(f"Process starting with {name=} has {pid=}, {is_alive=}") # Maybe yield cmdline
 
 
 # Configure API
@@ -247,7 +247,7 @@ class Status(Resource):
             logger.info("Returned current status successfully")
 
             # Yield before returning
-            yield_pids()
+            yield_active_processes()
 
             return {"result": "Success", "message": message}, 200
         except Exception as e:
@@ -311,7 +311,7 @@ class Configuration(Resource):
                 logger.info("New configuration applied successfully")
 
                 # Yield before returning
-                yield_pids()
+                yield_active_processes()
 
                 return {"result": "Success", "message": "Configuration set"}, 200
             except Exception as e:
@@ -396,7 +396,7 @@ class Pcap(Resource):
                 logger.info(f"Pipes written with {len(pcap_data)} bytes from {pcap_name=}")
 
                 # Yield before returning
-                yield_pids()
+                yield_active_processes()
 
                 return {"result": "Success", "message": f"Pcap {pcap_name} received, start {ENV_NAME}"}, 200
             except Exception as e:
