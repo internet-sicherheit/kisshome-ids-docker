@@ -32,7 +32,7 @@ Slim Autoencoder for anomaly detection.
 - Loss: MSE (mean)
 """
 from __future__ import annotations
-from typing import Tuple, List
+from typing import Any
 
 from torch import Tensor, no_grad, from_numpy, save, load, inference_mode, enable_grad, set_num_threads
 from torch.nn import Module, Sequential, Linear, ReLU, MSELoss

@@ -30,12 +30,12 @@ RUN apt update && \
     libpcre2-8-0 \
     libyaml-0-2 \
     libjansson4 \
-    libmagic1 \
-    libpcap0.8 \
+    libmagic1t64 \
+    libpcap0.8t64 \
     libnet1 \
     libcap-ng0 \
     liblua5.3-0 \
-    libgeoip1 \
+    libgeoip1t64 \
     libhiredis1.1.0 \
     python3 \
     python3-pip \

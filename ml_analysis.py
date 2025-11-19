@@ -63,13 +63,10 @@ from __future__ import annotations
 import os
 import json
 import time
-import uuid
 import glob
-import math
 import ipaddress
 import dpkt
 import shutil
-import signal
 import logging
 import hashlib
 import traceback
@@ -850,7 +847,7 @@ def compute_threshold(scores: np.ndarray, logger: logging.Logger, depth = 0) -> 
     if depth == len(THRESHOLD_FUNCTIONS):
         logger.info(f"Reached max-depth, using simple threshold")
         # Simple threshold slightly above 90th percentile, gated by 99th percentile
-        threshold = min((np.percentile(scores, 90) + std(s)) * 1.2, np.percentile(s, 99))
+        threshold = min((np.percentile(scores, 90) + std(scores)) * 1.2, np.percentile(scores, 99))
 
     # Usual case: try next threshold function
     elif depth < len(THRESHOLD_FUNCTIONS):
@@ -862,7 +859,7 @@ def compute_threshold(scores: np.ndarray, logger: logging.Logger, depth = 0) -> 
     else:
         # Somehow has recursed past max-depth, hard return 
         logger.info(f"Reached max-depth, using simple threshold")
-        return float(np.percentile(s, 99))
+        return float(np.percentile(scores, 99))
 
     if threshold == 1.0 or threshold == 0.0 or threshold == 0 or threshold == 1:
         # Try next threshold function
@@ -1271,9 +1268,6 @@ def extract_pcap_infos(pcap: dpkt.pcap.Reader, devices: Set[str]) -> Tuple[Dict[
 
         total_packet_count += 1
 
-        if total_packet_count >= MIN_PACKET_COUNT_FOR_ERROR_CHECK and error_count / max(total_packet_count, 1) > MAX_ERROR_PERCENTAGE:
-            return None, None
-
         try:
             ts, buf = packet
 
@@ -1435,7 +1429,7 @@ def extract_pcap_infos(pcap: dpkt.pcap.Reader, devices: Set[str]) -> Tuple[Dict[
     }
 
     if packet_count > 0:
-        logger.info(f"\nDone reading in pcap with {packet_count} packets. \n Avg time per packet: {(time.time() - start_time) / packet_count:.6f}s")
+        logger.info(f"\nDone reading in pcap with {packet_count} packets. Encountered {error_count} faulty packets. \n Avg time per packet: {(time.time() - start_time) / packet_count:.6f}s")
     else:
         error_message = f"Pcap read in successfuly, but "
         if error_count > 0:
@@ -2278,7 +2272,7 @@ ACTION_INFER = "INFER"
 ACTION_COLLECT = "COLLECT"
 ACTION_TRAIN = "TRAIN"
 
-def decide_action_for_device(dev_progress: TrainingStatus, training_enabled: bool) -> Literal[ACTION_INFER, ACTION_COLLECT, ACTION_TRAIN]:
+def decide_action_for_device(dev_progress: TrainingStatus, training_enabled: bool) -> Literal[ACTION_INFER, ACTION_COLLECT, ACTION_TRAIN]: # type: ignore
     """
     Logic:
       - if training_enabled:
@@ -2290,7 +2284,7 @@ def decide_action_for_device(dev_progress: TrainingStatus, training_enabled: boo
     """
     if not training_enabled:
         if dev_progress.progress != 1.0:
-            logger.warning(f"Forcing inference for device {dev_mac} without trained model. Results will be unreliable.")
+            logger.warning(f"Forcing inference for device without trained model. Results will be unreliable.")
         return ACTION_INFER
 
     if dev_progress.progress < 1.0:
@@ -2309,7 +2303,7 @@ def maybe_plot(scores_nd: np.ndarray, threshold: float, mac_key: str, anomalies_
     Plots the scores and the threshold, and saves the plot to the shared directory.
     Used for debugging purposes, not used in production.
     """
-    import matplotlib.pyplot as plt
+    import matplotlib.pyplot as plt # type: ignore
     # Make sure scores is 1D
     scores = np.asarray(scores_nd).reshape(-1)
 
@@ -2421,7 +2415,7 @@ def load_task_carryovers(devices: Set[str]) -> Dict[str, TaskCarryover]:
 
 @dataclass
 class WorkerTask:
-    action: Literal[ACTION_INFER, ACTION_COLLECT, ACTION_TRAIN]
+    action: Literal[ACTION_INFER, ACTION_COLLECT, ACTION_TRAIN] # type: ignore
     device_mac_key: str
     task_carryover: Optional[TaskCarryover] = None
 
@@ -2606,7 +2600,7 @@ def _worker_handle_task(task: WorkerTask) -> WorkerResult:
 JANNIKLAS_THRESHOLD = 50
 JANNIKLAS_THRESHOLD2= 99
 
-def create_device_report(device_mac_key: str, action: Literal[ACTION_INFER, ACTION_COLLECT, ACTION_TRAIN], device_status: TrainingStatus = None, anomalies_found_for_device: int = None, error: str = None) -> Dict[str, Any]:
+def create_device_report(device_mac_key: str, action: Literal[ACTION_INFER, ACTION_COLLECT, ACTION_TRAIN], device_status: TrainingStatus = None, anomalies_found_for_device: int = None, error: str = None) -> Dict[str, Any]: # type: ignore
     report = {}
     report["action"] = action
 

@@ -104,3 +104,11 @@ First stable version released for study
 
 * Bugfix in API to prevent a race condition on the meta.json file by /config and /status endpoints
 
+## 1.6.6 (19-11-2025)
+
+### Changes
+
+* Bugfix with variable s which meant to be scores in ml
+* Fix error handling in ml
+* Fix a log message wrongly referencing to dev_mac in ml
+
