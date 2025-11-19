@@ -264,6 +264,7 @@ def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
                     raise RuntimeError(suricatasc_process.stderr.decode()) 
                 else:
                     # Wait for Suricata to finish but don't use socket
+                    logger.info(f"Waiting for Suricatasc to finish")
                     has_finished = False
                     while not has_finished:
                         # Use the logfile to check if pcap is done

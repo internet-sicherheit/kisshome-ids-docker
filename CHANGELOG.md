@@ -113,4 +113,5 @@ First stable version released for study
 * Fix a log message wrongly referencing to dev_mac in ml
 * Add handling of corrupt model data in ml
 * Change to RuntimeError in rb
+* Yield process infos when using API
 

@@ -81,6 +81,7 @@ import gzip
 import io
 import csv
 import random
+import setproctitle
 from datetime import datetime, timezone
 from functools import lru_cache # check if necessary
 from pathlib import Path
@@ -2679,6 +2680,10 @@ def flush_results(out_pipe: str, device_results: Dict[str, Any], pcap_statistics
 
     result_text = json.dumps(result_data, indent=4)
 
+    #logger.debug(f"Result data: {result_data}") # Too verbose, only for hard debugging
+
+    logger.info("Flushing results to %s", out_pipe)
+
     with open(out_pipe, "w") as fw:
         fw.write(result_text)
 
@@ -2919,11 +2924,13 @@ def ml_analysis_loop(pcap_in_pipe: str, out_pipe: str, training_enabled: bool, t
                         logger.info(f"Training completed, updated progress to {new_training_status} for device {mac_key}")
 
             analysis_ms = int((time.time() - start_wall) * 1000)
-            logger.info(f"Processing completed in {analysis_ms}ms")
+            logger.info(f"Processing completed in {analysis_ms} ms")
 
             # Compose final payload
             jan_niklas_reports = {mac_key: translate_result_to_janniklas(report) for mac_key, report in device_results.items()}
+            logger.info(f"Transformed results to expected format results to {out_pipe}")
             flush_results(out_pipe, jan_niklas_reports, pcap_statistics, analysis_ms)
+            logger.info(f"Results flushed to {out_pipe}")
             
         except Exception as e:
             logger.exception("Top-level loop error: %s", e)
@@ -2947,6 +2954,8 @@ def ml_analyze(ml_logger: object, pcap_in_pipe: str,out_pipe: str,devices_json_p
                 logger = _setup_logging()
                 
         logger.info("Starting ml_analyze. training_enabled=%s", training_enabled)
+        # This process is named after the program
+        setproctitle.setproctitle(__file__)
 
         # Ensure dirs and files
         ROOT_SHARED.mkdir(parents=True, exist_ok=True)

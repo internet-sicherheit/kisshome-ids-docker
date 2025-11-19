@@ -35,6 +35,7 @@ import json
 import gzip
 import base64
 import time
+import psutil
 
 from logging.handlers import TimedRotatingFileHandler
 from flask import Flask, request
@@ -102,11 +103,36 @@ app = Flask(__name__)
 
 
 def configure_app(flask_app):
+    """
+    """
     flask_app.config['SWAGGER_UI_DOC_EXPANSION'] = True
     flask_app.config['RESTX_VALIDATE'] = True
     flask_app.config['RESTX_MASK_SWAGGER'] = False
     flask_app.config['ERROR_404_HELP'] = True  # False in prod
     logger.info(f"Start Flask API with version {VERSION}")
+
+
+def yield_pids():
+    """
+    """
+    # Get all processes whose name matches the script set via setproctitle
+    target_processes = []
+    python_process_extension = ".py"
+
+    for proc in psutil.process_iter(['pid', 'name']):
+        try:
+            if python_process_extension in proc.info['name']:
+                target_processes.append(proc)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    
+    # Print
+    logger.info("Active python processes:\n")
+    for proc in target_processes:
+        pid = proc.pid
+        name = proc.name()
+        is_alive = proc.is_running()
+        logger.info(f"Process with {name=} has {pid=}, {is_alive=}")
 
 
 # Configure API
@@ -182,6 +208,7 @@ class Status(Resource):
                 # Ensure logs_send is False when other states are present
                 if logs_send:
                     logs_send = False
+
             # Load meta.json if it exists 
             meta_json = {}
             if os.path.exists(ids.meta_json):
@@ -191,6 +218,7 @@ class Status(Resource):
                             meta_json = json.load(meta_file)
                         except json.JSONDecodeError:
                             pass
+
             # Load training_progress.json if it exists
             tmp_training_json = {}
             training_json = {}
@@ -200,6 +228,7 @@ class Status(Resource):
                         tmp_training_json = json.load(training_file)
                     except json.JSONDecodeError:
                         pass
+
             # Filter progress and description
             for mac, info in tmp_training_json.items():
                 formatted_mac = mac.replace('-', ':').upper()
@@ -207,6 +236,7 @@ class Status(Resource):
                 progress = training_json[formatted_mac]["progress"]
                 training_json[formatted_mac]["progress"] = progress * 100 # Adjust progress for adapter
             tmp_training_json.clear()
+
             # Return json
             message = {"version": VERSION,
                        "status": get_state(),
@@ -215,6 +245,10 @@ class Status(Resource):
                        "error_logs": error_logs}
             logger.debug(f"Current status: {message}")
             logger.info("Returned current status successfully")
+
+            # Yield before returning
+            yield_pids()
+
             return {"result": "Success", "message": message}, 200
         except Exception as e:
             logger.exception(f"API error: {e}")
@@ -275,6 +309,9 @@ class Configuration(Resource):
 
                 logger.debug(f"New configuration: {callback_url=}, {save_threshold_seconds=}, {allow_training=}, {meta_json=}")
                 logger.info("New configuration applied successfully")
+
+                # Yield before returning
+                yield_pids()
 
                 return {"result": "Success", "message": "Configuration set"}, 200
             except Exception as e:
@@ -357,6 +394,9 @@ class Pcap(Resource):
 
                 logger.debug(f"{pcap_data=}")       
                 logger.info(f"Pipes written with {len(pcap_data)} bytes from {pcap_name=}")
+
+                # Yield before returning
+                yield_pids()
 
                 return {"result": "Success", "message": f"Pcap {pcap_name} received, start {ENV_NAME}"}, 200
             except Exception as e:
