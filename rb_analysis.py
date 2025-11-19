@@ -120,7 +120,7 @@ def rb_start_daemon(rb_logger):
             if suricatad_process.returncode != 0:
                 # Something went wrong
                 logger.exception(f"Suricata daemon process had a non zero exit code: {suricatad_process}")
-                raise Exception(suricatad_process) 
+                raise RuntimeError(suricatad_process.stderr.decode()) 
             else:
                 is_ready = False
                 while not is_ready:
@@ -195,10 +195,11 @@ def rb_test_daemon(rb_logger):
             # Reset retries
             MAX_RETRIES = 3
             logger.exception(f"Suricatasc process had a non zero exit code: {suricatasc_process}")
-            raise Exception(suricatasc_process)
+            raise RuntimeError(suricatasc_process.stderr.decode())
     logger.info(f"Suricata daemon test successful: {suricatasc_process}")
     # Reset retries
     MAX_RETRIES = 3
+
 
 def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
     """
@@ -260,7 +261,7 @@ def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
                     if temp_pcap:
                         os.unlink(temp_pcap)
                         logger.debug(f"Deleted temp file {temp_pcap}")
-                    raise Exception(suricatasc_process) 
+                    raise RuntimeError(suricatasc_process.stderr.decode()) 
                 else:
                     # Wait for Suricata to finish but don't use socket
                     has_finished = False
@@ -290,6 +291,7 @@ def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
             logger.exception(f"Suricata error: {e}")
             message = {"error": traceback.format_exc()}
             rb_flush_results(rb_result_pipe_path, message)
+            continue
 
 
 def rb_write_results(rb_result_pipe_path, duration):

@@ -111,4 +111,6 @@ First stable version released for study
 * Bugfix with variable s which meant to be scores in ml
 * Fix error handling in ml
 * Fix a log message wrongly referencing to dev_mac in ml
+* Add handling of corrupt model data in ml
+* Change to RuntimeError in rb
 

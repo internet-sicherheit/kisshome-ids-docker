@@ -2901,10 +2901,14 @@ def ml_analysis_loop(pcap_in_pipe: str, out_pipe: str, training_enabled: bool, t
                     task_carryovers[mac_key] = res.task_carryover
 
                     if not res.ok:
+                        run_failed = True
                         device_report = create_device_report(mac_key, action, error=log_text)
                         device_results[mac_key] = device_report
                         logger.info(f"Training failed for device {mac_key}: {log_text}")
-                        run_failed = True
+
+                        if res.reset:
+                            logger.error(f"Wroker detected corrupt files for device {mac_key}. Resetting device components.")
+                            reset_device_components(mac_key, progress_json_path)
                         continue
                     else:
                         new_training_status = res.training_status
