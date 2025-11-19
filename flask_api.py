@@ -118,21 +118,24 @@ def yield_active_processes():
     # Get all processes whose name matches the script set via setproctitle
     target_processes = []
 
-    for proc in psutil.process_iter(['pid', 'name']):
+    for proc in psutil.process_iter():
         try:
-            if "/app/" in proc.info['name']:
+            if "/app/" in proc.name():
                 target_processes.append(proc)
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
     
-    # Print
+    # Log results
     if target_processes:
         logger.info("Active python processes:")
         for proc in target_processes:
             pid = proc.pid
-            name = proc.name()
+            # cmdline is a list
+            for arg in proc.cmdline():
+                if arg and ".py" in arg.strip():
+                    name = arg.strip()
             is_alive = proc.is_running()
-            logger.info(f"Process starting with {name=} has {pid=}, {is_alive=}") # Maybe yield cmdline
+            logger.info(f"Process with {name=} has {pid=}, {is_alive=}")
 
 
 # Configure API
