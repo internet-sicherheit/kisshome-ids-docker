@@ -76,7 +76,7 @@ logger.propagate = False
 setproctitle.setproctitle(__file__)
 
 # Version
-VERSION = "1.6.6"
+VERSION = "1.6.7"
 
 # For pcap check
 PCAP_MAGIC_NUMBERS = {
@@ -127,7 +127,7 @@ def yield_active_processes():
     
     # Log results
     if target_processes:
-        logger.info("Active python processes:")
+        active_count = 0
         for proc in target_processes:
             pid = proc.pid
             # cmdline is a list
@@ -135,7 +135,10 @@ def yield_active_processes():
                 if arg and ".py" in arg.strip():
                     name = arg.strip()
             is_alive = proc.is_running()
-            logger.info(f"Process with {name=} has {pid=}, {is_alive=}")
+            if is_alive:
+                active_count += 1
+            logger.debug(f"Process with {name=} has {pid=}, {is_alive=}")
+        logger.info(f"Active python processes in /app/: {active_count}")
 
 
 # Configure API

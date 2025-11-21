@@ -84,6 +84,8 @@ RB_SOCKET = "/var/run/suricata/suricata-command.socket"
 META_JSON = None
 # Attempts before throwing an error
 MAX_RETRIES = 3
+# Max. allowed analysis time for Suricata to finish
+MAX_DURATION = 10 * 60
 
 
 logger = None 
@@ -265,8 +267,13 @@ def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
                 else:
                     # Wait for Suricata to finish but don't use socket
                     logger.info(f"Waiting for Suricatasc to finish")
+                    waiting_time = time.time()
                     has_finished = False
                     while not has_finished:
+                        analysis_time = time.time() - waiting_time
+                        if analysis_time >= MAX_DURATION:
+                            with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "r") as incompleted_log_file:
+                                raise RuntimeError(incompleted_log_file.read())
                         # Use the logfile to check if pcap is done
                         with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "r") as log_file:
                             for log_line in log_file.readlines():

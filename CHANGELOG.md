@@ -115,3 +115,9 @@ First stable version released for study
 * Change to RuntimeError in rb
 * Yield process infos when using API
 
+## 1.6.7 (21-11-2025)
+
+### Changes
+
+* Adjust logging of active python processes
+* Add Error case in rb if the analysis takes longer than 10 minutes
