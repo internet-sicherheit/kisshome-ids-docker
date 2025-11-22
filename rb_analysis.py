@@ -350,7 +350,7 @@ def rb_filter_results(eve_json, duration):
     """
     # Structure:
     # "detections": [{"mac": "", "suricata": [], "ml": {}}]   
-    alert_dictionary = {"detections": [], "statistics": {"suricataTotalRules": rb_count_rules(), "suricataAnalysisDurationMs": duration * 1000}}
+    alert_dictionary = {"detections": [], "statistics": {"suricataTotalRules": rb_count_rules(), "suricataAnalysisDurationMs": int(duration * 1000)}}
     for line in eve_json:
         entry = json.loads(line)
         if entry["event_type"] == "alert":
