@@ -1204,7 +1204,7 @@ datasets:
 security:
   # if true, prevents process creation from Suricata by calling
   # setrlimit(RLIMIT_NPROC, 0)
-  limit-noproc: true
+  limit-noproc: false
   # Use landlock security module under Linux
   landlock:
     enabled: no

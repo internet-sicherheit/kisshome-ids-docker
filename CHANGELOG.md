@@ -119,5 +119,12 @@ First stable version released for study
 
 ### Changes
 
-* Adjust logging of active python processes
+* Adjust logging of active python processes in API
 * Add Error case in rb if the analysis takes longer than 10 minutes
+
+## 1.6.8 (22-11-2025)
+
+### Changes
+
+* Add Error case in rb if the daemon creation takes longer than 5 minutes
+* Fix in suricata.yaml to prevent thread creation error

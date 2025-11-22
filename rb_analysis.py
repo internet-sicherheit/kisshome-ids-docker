@@ -84,8 +84,10 @@ RB_SOCKET = "/var/run/suricata/suricata-command.socket"
 META_JSON = None
 # Attempts before throwing an error
 MAX_RETRIES = 3
-# Max. allowed analysis time for Suricata to finish
-MAX_DURATION = 10 * 60
+# Max. allowed creation time for Suricata daemon to start
+MAX_CREATION_TIME = 5 * 60
+# Max. allowed analysis time for Suricatasc to finish
+MAX_ANALYSIS_TIME = 10 * 60
 
 
 logger = None 
@@ -124,8 +126,15 @@ def rb_start_daemon(rb_logger):
                 logger.exception(f"Suricata daemon process had a non zero exit code: {suricatad_process}")
                 raise RuntimeError(suricatad_process.stderr.decode()) 
             else:
+                # Wait max. 5 min for Suricata daemon to start but don't use socket
+                logger.info(f"Waiting for Suricata daemon to start")
+                starting_time = time.time()
                 is_ready = False
                 while not is_ready:
+                    creation_time = time.time() - starting_time
+                    if creation_time >= MAX_CREATION_TIME:
+                        with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "r") as incompleted_log_file:
+                            raise RuntimeError(incompleted_log_file.read())
                     # Use the file path provided in the .yaml
                     with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "r") as log_file_r:
                         for log_line in log_file_r.readlines():
@@ -265,13 +274,13 @@ def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
                         logger.debug(f"Deleted temp file {temp_pcap}")
                     raise RuntimeError(suricatasc_process.stderr.decode()) 
                 else:
-                    # Wait for Suricata to finish but don't use socket
+                    # Wait max. 10 min for Suricatasc to finish but don't use socket
                     logger.info(f"Waiting for Suricatasc to finish")
                     waiting_time = time.time()
                     has_finished = False
                     while not has_finished:
                         analysis_time = time.time() - waiting_time
-                        if analysis_time >= MAX_DURATION:
+                        if analysis_time >= MAX_ANALYSIS_TIME:
                             with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "r") as incompleted_log_file:
                                 raise RuntimeError(incompleted_log_file.read())
                         # Use the logfile to check if pcap is done
