@@ -1058,11 +1058,13 @@ def maybe_create_threshold_file() -> None:
 
     # See if the file is in the correct format # TODO: Remove this once the file is in the new format
     else:
+        logger.info(f"Threshold file {THRESHOLD_FILENAME} exists and is not empty, checking format.")
         with open(THRESHOLD_FILENAME, "r", encoding="utf-8") as f:
             json_content = json.load(f)
 
         # File is empty or only contains {}, nothing to do
         if not json_content:
+            logger.info(f"Threshold file {THRESHOLD_FILENAME} is empty, nothing to do.")
             return
 
         try:

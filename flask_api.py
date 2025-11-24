@@ -75,9 +75,6 @@ logger.propagate = False
 # This process is named after the program
 setproctitle.setproctitle(__file__)
 
-# Version
-VERSION = "1.6.8"
-
 # For pcap check
 PCAP_MAGIC_NUMBERS = {
     b"\xa1\xb2\xc3\xd4",  # Big-endian, microsecond resolution (standard)

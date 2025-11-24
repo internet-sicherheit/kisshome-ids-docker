@@ -132,11 +132,10 @@ def rb_start_daemon(rb_logger):
                 is_ready = False
                 while not is_ready:
                     creation_time = time.time() - starting_time
-                    if creation_time >= MAX_CREATION_TIME:
-                        with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "r") as incompleted_log_file:
-                            raise RuntimeError(incompleted_log_file.read())
                     # Use the file path provided in the .yaml
                     with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "r") as log_file_r:
+                        if creation_time >= MAX_CREATION_TIME:
+                            raise RuntimeError(log_file_r.read())
                         for log_line in log_file_r.readlines():
                             if "unix socket" in log_line:
                                 socket = str(log_line).split("'")[1] # Parse socket name from line
@@ -147,6 +146,9 @@ def rb_start_daemon(rb_logger):
                                 is_ready = True # Daemon has created socket and started engine
                                 log_file_r.seek(0)
                                 break
+                            if "Error:" in log_line: # Something happened, raise
+                                log_file_r.seek(0)
+                                raise RuntimeError(log_file_r.read())
                         log_file_r.seek(0) # Reset read
                 with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "w") as log_file_w:
                         log_file_w.write("") # Delete old logs
@@ -280,16 +282,18 @@ def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
                     has_finished = False
                     while not has_finished:
                         analysis_time = time.time() - waiting_time
-                        if analysis_time >= MAX_ANALYSIS_TIME:
-                            with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "r") as incompleted_log_file:
-                                raise RuntimeError(incompleted_log_file.read())
                         # Use the logfile to check if pcap is done
                         with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "r") as log_file:
+                            if analysis_time >= MAX_ANALYSIS_TIME:
+                                raise RuntimeError(log_file.read())
                             for log_line in log_file.readlines():
                                 if "counters: Alerts:" in log_line: # Pcap is done
-                                    has_finished = True
                                     log_file.seek(0)
+                                    has_finished = True
                                     break
+                                if "Error:" in log_line: # Something happened, raise
+                                    log_file.seek(0)
+                                    raise RuntimeError(log_file.read())
                             # Reset file read
                             log_file.seek(0)
                     # Unlink tempfile (delete)

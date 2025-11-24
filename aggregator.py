@@ -36,7 +36,7 @@ import json
 import time
 
 from logging.handlers import TimedRotatingFileHandler
-from states import get_state, set_state, ANALYZING, RUNNING, ERROR
+from states import *
 from monitor import get_cpuinfo, get_gpuinfo, start_monitoring, stop_monitoring, SYSSTAT_DIRECTORY
 from datetime import datetime, timezone
 
@@ -386,7 +386,8 @@ def aggregate(aggregator_logger, rb_result_pipe, ml_result_pipe, callback_url, s
 
                     message = {"rb": rb_message, "ml": ml_message}
 
-                    head = {"file": pcap_name, 
+                    head = {"version": VERSION,
+                            "file": pcap_name, 
                             "time": datetime.now(timezone.utc).isoformat(), 
                             "result": {"status": "error", "message": message}
                             }
@@ -409,7 +410,8 @@ def aggregate(aggregator_logger, rb_result_pipe, ml_result_pipe, callback_url, s
                     with open(META_JSON, "r") as meta_file:
                         current_macs = json.load(meta_file).keys()
 
-                    head = {"file": pcap_name, 
+                    head = {"version": VERSION,
+                            "file": pcap_name, 
                             "time": datetime.now(timezone.utc).isoformat(), 
                             "result": {"status": "success", "message": ""}
                             }
