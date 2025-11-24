@@ -151,17 +151,18 @@ tag_image_id() {
 }
 
 extract_status() {
-  if have jq; then
+  if command -v jq >/dev/null 2>&1; then
     jq -r '.message.status // empty'
-  else
-    python3 - <<'PY' || true
-import sys, json
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import sys, json
 try:
     data = json.load(sys.stdin)
     print((data.get("message") or {}).get("status",""))
 except Exception:
-    pass
-PY
+    pass'
+  else
+    # ultra-simple fallback: best-effort grep/sed (not strict JSON parsing)
+    sed -n 's/.*"status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1
   fi
 }
 
