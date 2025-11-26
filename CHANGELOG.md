@@ -129,10 +129,16 @@ First stable version released for study
 * Add Error case in rb if the daemon creation takes longer than 5 minutes
 * Fix in suricata.yaml to prevent thread creation error
 
-## 1.6.8 (24-11-2025)
+## 1.6.9 (24-11-2025)
 
 ### Changes
 
 * Move VERSION variable to states.py to allow global access instead of staying in API
 * Display current version in results in aggregator
 * Optimizing code in rb 
+
+## 1.7.0 (26-11-2025)
+
+### Changes
+
+* Remove some error checks in rb

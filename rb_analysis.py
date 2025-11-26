@@ -146,9 +146,6 @@ def rb_start_daemon(rb_logger):
                                 is_ready = True # Daemon has created socket and started engine
                                 log_file_r.seek(0)
                                 break
-                            if "Error:" in log_line: # Something happened, raise
-                                log_file_r.seek(0)
-                                raise RuntimeError(log_file_r.read())
                         log_file_r.seek(0) # Reset read
                 with open(os.path.join(SURICATA_YAML_DIRECTORY, "suricata.log"), "w") as log_file_w:
                         log_file_w.write("") # Delete old logs
@@ -291,9 +288,6 @@ def rb_analyze(rb_logger, rb_pcap_pipe_path, rb_result_pipe_path, meta_json):
                                     log_file.seek(0)
                                     has_finished = True
                                     break
-                                if "Error:" in log_line: # Something happened, raise
-                                    log_file.seek(0)
-                                    raise RuntimeError(log_file.read())
                             # Reset file read
                             log_file.seek(0)
                     # Unlink tempfile (delete)

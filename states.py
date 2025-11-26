@@ -33,7 +33,7 @@ from filelock import FileLock
 
 
 # Version
-VERSION = "1.6.9"
+VERSION = "1.7.0"
 # Define the name of our environment
 ENV_NAME = "KISSHOME IDS"
 # State file saving the current state
