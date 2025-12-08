@@ -142,3 +142,10 @@ First stable version released for study
 ### Changes
 
 * Remove some error checks in rb
+
+## 1.7.1 (08-12-2025)
+
+### Changes
+
+* Minor code improvements
+

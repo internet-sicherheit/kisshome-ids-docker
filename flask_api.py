@@ -126,15 +126,18 @@ def yield_active_processes():
     if target_processes:
         active_count = 0
         for proc in target_processes:
-            pid = proc.pid
-            # cmdline is a list
-            for arg in proc.cmdline():
-                if arg and ".py" in arg.strip():
-                    name = arg.strip()
-            is_alive = proc.is_running()
-            if is_alive:
-                active_count += 1
-            logger.debug(f"Process with {name=} has {pid=}, {is_alive=}")
+            try:
+                pid = proc.pid
+                # cmdline is a list
+                for arg in proc.cmdline():
+                    if arg and ".py" in arg.strip():
+                        name = arg.strip()
+                is_alive = proc.is_running()
+                if is_alive:
+                    active_count += 1
+                logger.debug(f"Process with {name=} has {pid=}, {is_alive=}")
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
         logger.info(f"Active python processes in /app/: {active_count}")
 
 
